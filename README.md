@@ -22,7 +22,7 @@ cd nota-reimbursement
 ---
 
 ### 3. Buat file `.env.local`
-Buat file `.env.local` di root project dan isi dengan nilai yang diberikan oleh tim:
+Buat file `.env.local` di root project dan isi dengan nilai yang diberikan:
 
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=
