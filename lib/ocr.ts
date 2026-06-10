@@ -218,7 +218,6 @@ export async function runOCR(imageBuffer: Buffer): Promise<OCRResult> {
 
     worker = await createWorker(['ind', 'eng'], 1, {
       logger: () => {},
-      workerPath,
     })
 
     const { data } = await worker.recognize(imageBuffer)
