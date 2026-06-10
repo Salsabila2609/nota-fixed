@@ -594,10 +594,23 @@ export default function DriverPage() {
     setUploading(true)
     setUploadResults(null)
     const today = new Date().toISOString().slice(0, 10)
-    const fd = new FormData()
-    fd.append('submission_date', today)
-    files.forEach((item, i) => fd.append(`image_${i}`, item.file))
+
     try {
+      // OCR semua file di browser dulu
+      const { runOCRClient } = await import('@/lib/ocr-client')
+      
+      const ocrResults = await Promise.all(
+        files.map(item => runOCRClient(item.file))
+      )
+
+      const fd = new FormData()
+      fd.append('submission_date', today)
+      files.forEach((item, i) => {
+        fd.append(`image_${i}`, item.file)
+        // Kirim hasil OCR bareng gambar
+        fd.append(`ocr_${i}`, JSON.stringify(ocrResults[i]))
+      })
+
       const res = await fetch('/api/submissions', { method: 'POST', body: fd })
       const data = await res.json()
       setUploadResults(data.results || [])
