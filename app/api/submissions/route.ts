@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { processReceiptImage } from '@/lib/image-processing'
 import { r2Upload, r2SignedUrl, r2Delete } from '@/lib/r2'
 import { v4 as uuidv4 } from 'uuid'
+import { runOCR } from '@/lib/ocr-google'
 
 export async function GET(req: NextRequest) {
   const session = await getSessionFromRequest(req)
@@ -91,7 +92,7 @@ export async function POST(req: NextRequest) {
     const results: { ok: boolean; error?: string; filename?: string; submission?: any }[] = []
 
     await Promise.all(
-      images.map(async (image, index) => {
+      images.map(async (image) => {
         const imageBuffer = Buffer.from(await image.arrayBuffer())
 
         const processed = await processReceiptImage(imageBuffer)
@@ -100,11 +101,7 @@ export async function POST(req: NextRequest) {
           return
         }
 
-        // Ambil OCR result dari client
-        const ocrRaw = formData.get(`ocr_${index}`) as string
-        const ocrResult = ocrRaw
-          ? JSON.parse(ocrRaw)
-          : { raw_text: '', amount: null, category: 'lainnya', description: '', date: null }
+        const ocrResult = await runOCR(processed.buffer)
 
         const fileId = uuidv4()
         const imagePath = `${uploadDriverId}/${submission_date}/${fileId}.jpg`
