@@ -599,9 +599,11 @@ export default function DriverPage() {
       // OCR semua file di browser dulu
       const { runOCRClient } = await import('@/lib/ocr-client')
       
-      const ocrResults = await Promise.all(
-        files.map(item => runOCRClient(item.file))
-      )
+      const ocrResults: any[] = []
+      for (const item of files) {
+        const result = await runOCRClient(item.file)
+        ocrResults.push(result)
+      }
 
       const fd = new FormData()
       fd.append('submission_date', today)
