@@ -10,9 +10,10 @@ export type OCRResult = {
 }
 
 function getClient() {
-  return new vision.ImageAnnotatorClient({
-    keyFilename: path.join(process.cwd(), 'lib', 'google-credentials.json')
-  })
+  const credentials = JSON.parse(
+    Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64!, 'base64').toString('utf-8')
+  )
+  return new vision.ImageAnnotatorClient({ credentials })
 }
 
 function detectCategory(text: string): string {
