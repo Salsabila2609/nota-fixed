@@ -19,9 +19,9 @@ function detectCategory(text: string): string {
   const lower = text.toLowerCase().replace(/\s+/g, ' ')
   const nospace = lower.replace(/\s/g, '')
   const patterns = [
-    { cat: 'tol', keywords: ['tol', 'jasa marga', 'jasamarga', 'e-toll', 'etoll', 'transjawa', 'gerbang', 'ruas tol'], nospaceKeywords: ['jasamarga', 'etoll'] },
     { cat: 'parkir', keywords: ['parkir', 'parking', 'park', 'retribusi', 'tiket parkir'], nospaceKeywords: ['tiketparkir'] },
-    { cat: 'bensin', keywords: ['pertamina', 'shell', 'spbu', 'bbm', 'pertalite', 'pertamax', 'solar', 'liter', 'biosolar'], nospaceKeywords: ['pertamina', 'spbu'] },
+    { cat: 'bensin', keywords: ['pertamina', 'shell', 'spbu', 'bbm', 'pertalite', 'pertamax', 'solar', 'biosolar'], nospaceKeywords: ['pertamina', 'spbu'] },
+    { cat: 'tol', keywords: ['tol', 'jasa marga', 'jasamarga', 'e-toll', 'etoll', 'transjawa', 'gerbang', 'ruas tol'], nospaceKeywords: ['jasamarga', 'etoll'] },
   ]
   for (const { cat, keywords, nospaceKeywords } of patterns) {
     if (keywords.some(kw => lower.includes(kw))) return cat
@@ -32,6 +32,7 @@ function detectCategory(text: string): string {
 
 function extractAmount(text: string, category?: string): number | null {
   const lines = text.split('\n')
+
   if (category === 'tol') {
     const tolLinePatterns = [
       /gol[\-\s]*\d[^\n\r]*?(\d{5,7})\s*$/i,
@@ -52,6 +53,83 @@ function extractAmount(text: string, category?: string): number | null {
       }
     }
   }
+
+  if (category === 'bensin') {
+    // Prioritas 1: cari "Dibayar Konsumen" lalu ambil angka dari baris berikutnya
+    for (let i = 0; i < lines.length; i++) {
+      if (/dibayar\s*konsumen/i.test(lines[i])) {
+        // Cek di baris yang sama dulu
+        const sameLine = lines[i].match(/(\d{1,3}(?:[.,]\d{3})+)/)
+        if (sameLine) {
+          const num = parseInt(sameLine[1].replace(/[.,]/g, ''), 10)
+          if (num >= 10_000 && num <= 5_000_000) return num
+        }
+        // Cek 3 baris ke depan
+        for (let j = i + 1; j <= Math.min(i + 3, lines.length - 1); j++) {
+          const cleaned = lines[j].replace(/[^\d.,]/g, ' ').trim()
+          const m = cleaned.match(/(\d{1,3}(?:[.,]\d{3})+)/)
+          if (m) {
+            const num = parseInt(m[1].replace(/[.,]/g, ''), 10)
+            if (num >= 10_000 && num <= 5_000_000) return num
+          }
+        }
+      }
+    }
+
+    // Prioritas 2: baris CASH yang mengandung angka
+    for (const line of lines) {
+      const m = line.match(/(?:cash|tunai)[^\n]*?(\d{1,3}(?:[.,]\d{3})+)/i)
+      if (m) {
+        const num = parseInt(m[1].replace(/[.,]/g, ''), 10)
+        if (num >= 10_000 && num <= 5_000_000) return num
+      }
+    }
+
+    // Prioritas 3: baris "CASH" sendiri, ambil angka dari baris berikutnya
+    for (let i = 0; i < lines.length; i++) {
+      if (/^cash$/i.test(lines[i].trim())) {
+        for (let j = i + 1; j <= Math.min(i + 2, lines.length - 1); j++) {
+          const cleaned = lines[j].replace(/[^\d.,]/g, ' ').trim()
+          const m = cleaned.match(/(\d{1,3}(?:[.,]\d{3})+)/)
+          if (m) {
+            const num = parseInt(m[1].replace(/[.,]/g, ''), 10)
+            if (num >= 10_000 && num <= 5_000_000) return num
+          }
+        }
+      }
+    }
+
+    // Prioritas 4: fallback — semua angka ribuan, skip baris harga per liter
+    const bensinSkipKeywords = [
+      'harga non subsidi',
+      'harga jual',
+      'subsidi pemerintah',
+      'tanpa subsidi',
+      'rp/liter',
+    ]
+    const candidates: { num: number; priority: number }[] = []
+    for (const line of lines) {
+      const lineLower = line.toLowerCase()
+      if (bensinSkipKeywords.some(kw => lineLower.includes(kw))) continue
+      const isBayar = /dibayar|cash|tunai|total penjualan/.test(lineLower)
+      const match = line.match(/\b(\d{1,3}(?:[.,]\d{3})+)\b/)
+      if (match) {
+        const num = parseInt(match[1].replace(/[.,]/g, ''), 10)
+        if (num >= 10_000 && num <= 5_000_000) {
+          candidates.push({ num, priority: isBayar ? 5 : 2 })
+        }
+      }
+    }
+    if (candidates.length) {
+      const maxPriority = Math.max(...candidates.map(c => c.priority))
+      const top = candidates.filter(c => c.priority === maxPriority)
+      return Math.max(...top.map(c => c.num))
+    }
+
+    return null
+  }
+
+  // Generic logic untuk kategori lainnya (tol sudah return di atas, bensin juga)
   const skipKeywords = ['saldo awal', 'saldo akhir', 'sisa', 'balance', 'sebelum', 'sesudah', 'kembalian']
   const biayaKeywords = ['biaya', 'tarif', 'total', 'bayar', 'charge', 'harga', 'transaksi', 'tagihan', 'nominal', 'jumlah', 'amount', 'tol', 'parkir', 'bbm', 'bensin']
   const candidates: { num: number; priority: number }[] = []

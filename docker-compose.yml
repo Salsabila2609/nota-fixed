@@ -11,8 +11,9 @@ services:
       - .env.local
     environment:
       - NODE_ENV=production
+    volumes:
+      - ./lib/google-credentials.json:/app/lib/google-credentials.json:ro
 
-  # Nginx reverse proxy (opsional - pakai kalau punya domain)
   nginx:
     image: nginx:alpine
     container_name: nota-reimburse-nginx
@@ -24,4 +25,4 @@ services:
     depends_on:
       - app
     profiles:
-      - with-nginx  # hanya aktif kalau docker compose --profile with-nginx up
+      - with-nginx
