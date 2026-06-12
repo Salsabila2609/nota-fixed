@@ -15,7 +15,7 @@ const IOH = {
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail]       = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
@@ -40,7 +40,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify({ username, password })
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error); return }
@@ -95,7 +95,7 @@ export default function LoginPage() {
             overflow: 'hidden',
           }}>
 
-            {/* ── Header — identik dengan topbar admin ── */}
+            {/* ── Header ── */}
             <div style={{
               background: IOH.white,
               borderBottom: `1px solid ${IOH.border}`,
@@ -114,7 +114,6 @@ export default function LoginPage() {
                   if (fb) fb.style.display = 'flex'
                 }}
               />
-              {/* Fallback pill kalau logo tidak ada */}
               <div style={{
                 display: 'none', alignItems: 'center', gap: 8,
                 background: `linear-gradient(135deg, ${IOH.red} 0%, ${IOH.magenta} 100%)`,
@@ -136,7 +135,6 @@ export default function LoginPage() {
             {/* ── Form body ── */}
             <div style={{ padding: '28px 28px 24px' }}>
 
-              {/* Greeting */}
               <div style={{ marginBottom: 26 }}>
                 <div style={{ fontSize: 20, fontWeight: 800, color: '#111', marginBottom: 5 }}>Selamat datang!</div>
                 <div style={{ fontSize: 13, color: '#aaa', lineHeight: 1.5 }}>
@@ -146,22 +144,22 @@ export default function LoginPage() {
 
               <form onSubmit={handleSubmit}>
 
-                {/* Email */}
+                {/* Username */}
                 <div style={{ marginBottom: 14 }}>
                   <label style={{
                     display: 'block', fontSize: 11, fontWeight: 700, color: '#999',
                     marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em',
                   }}>
-                    Email
+                    Username
                   </label>
                   <input
                     className="login-input"
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="nama@indosat.com"
+                    type="text"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                    placeholder="username"
                     required
-                    autoComplete="email"
+                    autoComplete="username"
                     style={{
                       width: '100%', padding: '11px 14px', borderRadius: 12,
                       border: `1.5px solid ${IOH.border}`, fontSize: 13,
@@ -214,7 +212,6 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                {/* Error */}
                 {error && (
                   <div style={{
                     padding: '10px 14px', borderRadius: 10, marginBottom: 16,
@@ -226,7 +223,6 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {/* Submit */}
                 <button
                   type="submit"
                   className="login-btn"
@@ -256,7 +252,6 @@ export default function LoginPage() {
               </form>
             </div>
 
-            {/* ── Footer ── */}
             <div style={{
               borderTop: `1px solid ${IOH.border}`,
               padding: '13px 28px',
@@ -274,7 +269,6 @@ export default function LoginPage() {
 
           </div>
 
-          {/* Versi kecil di bawah card */}
           <div style={{ textAlign: 'center', marginTop: 18, fontSize: 11, color: '#ccc', fontWeight: 500 }}>
             Hubungi admin jika lupa password
           </div>

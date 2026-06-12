@@ -5,7 +5,12 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { processReceiptImage } from '@/lib/image-processing'
 import { r2Upload, r2SignedUrl, r2Delete } from '@/lib/r2'
 import { v4 as uuidv4 } from 'uuid'
-import { runOCR } from '@/lib/ocr-google'
+import { runOCRBatch } from '@/lib/ocr-google'
+import pLimit from 'p-limit'
+
+// Batas concurrency untuk kerjaan CPU/network per-gambar (sharp processing, upload R2, insert DB).
+// Angka ini sengaja dijaga kecil supaya server tidak overload saat banyak gambar di-upload sekaligus.
+const CONCURRENCY = 3
 
 export async function GET(req: NextRequest) {
   const session = await getSessionFromRequest(req)
@@ -91,59 +96,88 @@ export async function POST(req: NextRequest) {
 
     const results: { ok: boolean; error?: string; filename?: string; submission?: any }[] = []
 
-    await Promise.all(
-      images.map(async (image) => {
-        const imageBuffer = Buffer.from(await image.arrayBuffer())
+    // ── Tahap 1: proses tiap gambar (blur check, crop, resize) dengan concurrency terbatas ──
+    const limit = pLimit(CONCURRENCY)
 
-        const processed = await processReceiptImage(imageBuffer)
-        if (!processed.ok) {
-          results.push({ ok: false, error: processed.reason, filename: image.name })
-          return
-        }
-
-        const ocrResult = await runOCR(processed.buffer)
-
-        const fileId = uuidv4()
-        const imagePath = `${uploadDriverId}/${submission_date}/${fileId}.jpg`
-
-        try {
-          await r2Upload(imagePath, processed.buffer, 'image/jpeg')
-        } catch {
-          results.push({ ok: false, error: 'Gagal upload ke storage', filename: image.name })
-          return
-        }
-
-        const { data: submission, error: dbError } = await supabaseAdmin
-          .from('submissions')
-          .insert({
-            driver_id: uploadDriverId,
-            driver_name: uploadDriverName,
-            category: ocrResult.category,
-            description: ocrResult.description || null,
-            amount: ocrResult.amount || null,
-            submission_date,
-            bill_date: ocrResult.date || null,
-            image_path: imagePath,
-            status: 'pending',
-            ocr_raw_text: ocrResult.raw_text || null,
-          })
-          .select()
-          .single()
-
-        if (dbError) {
-          await r2Delete(imagePath)
-          results.push({ ok: false, error: dbError.message, filename: image.name })
-          return
-        }
-
-        const imageUrl = await r2SignedUrl(imagePath)
-
-        results.push({
-          ok: true,
-          submission: { ...submission, image_url: imageUrl, proof_image_url: null },
-          filename: image.name,
+    const processedItems = await Promise.all(
+      images.map((image) =>
+        limit(async () => {
+          const imageBuffer = Buffer.from(await image.arrayBuffer())
+          const processed = await processReceiptImage(imageBuffer)
+          return { image, processed }
         })
-      })
+      )
+    )
+
+    // Pisahkan yang gagal diproses (blur/invalid) dari yang lolos
+    const validItems: { image: File; buffer: Buffer }[] = []
+    for (const { image, processed } of processedItems) {
+      if (!processed.ok) {
+        results.push({ ok: false, error: processed.reason, filename: image.name })
+        continue
+      }
+      validItems.push({ image, buffer: processed.buffer })
+    }
+
+    if (validItems.length === 0) {
+      return NextResponse.json({
+        results,
+        summary: { total: images.length, succeeded: 0, failed: results.length },
+      }, { status: 422 })
+    }
+
+    // ── Tahap 2: OCR semua gambar valid dalam 1 batch API call ──
+    const ocrResults = await runOCRBatch(validItems.map(v => v.buffer))
+
+    // ── Tahap 3: upload ke R2 + insert DB, dengan concurrency terbatas ──
+    await Promise.all(
+      validItems.map((item, idx) =>
+        limit(async () => {
+          const { image, buffer } = item
+          const ocrResult = ocrResults[idx]
+
+          const fileId = uuidv4()
+          const imagePath = `${uploadDriverId}/${submission_date}/${fileId}.jpg`
+
+          try {
+            await r2Upload(imagePath, buffer, 'image/jpeg')
+          } catch {
+            results.push({ ok: false, error: 'Gagal upload ke storage', filename: image.name })
+            return
+          }
+
+          const { data: submission, error: dbError } = await supabaseAdmin
+            .from('submissions')
+            .insert({
+              driver_id: uploadDriverId,
+              driver_name: uploadDriverName,
+              category: ocrResult.category,
+              description: ocrResult.description || null,
+              amount: ocrResult.amount || null,
+              submission_date,
+              bill_date: ocrResult.date || null,
+              image_path: imagePath,
+              status: 'pending',
+              ocr_raw_text: ocrResult.raw_text || null,
+            })
+            .select()
+            .single()
+
+          if (dbError) {
+            await r2Delete(imagePath)
+            results.push({ ok: false, error: dbError.message, filename: image.name })
+            return
+          }
+
+          const imageUrl = await r2SignedUrl(imagePath)
+
+          results.push({
+            ok: true,
+            submission: { ...submission, image_url: imageUrl, proof_image_url: null },
+            filename: image.name,
+          })
+        })
+      )
     )
 
     const succeeded = results.filter(r => r.ok).length

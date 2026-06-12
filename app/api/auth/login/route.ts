@@ -5,39 +5,38 @@ import { createSession } from '@/lib/auth'
 
 export async function POST(req: NextRequest) {
   try {
-    const { email, password } = await req.json()
+    const { username, password } = await req.json()
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email dan password wajib diisi' }, { status: 400 })
+    if (!username || !password) {
+      return NextResponse.json({ error: 'Username dan password wajib diisi' }, { status: 400 })
     }
 
     // Find user
     const { data: user, error } = await supabaseAdmin
       .from('users')
-      .select('id, name, email, role, password_hash')
-      .eq('email', email.toLowerCase().trim())
+      .select('id, name, username, role, password_hash')
+      .eq('username', username.toLowerCase().trim())
       .single()
 
     if (error || !user) {
-      return NextResponse.json({ error: 'Email atau password salah' }, { status: 401 })
+      return NextResponse.json({ error: 'Username atau password salah' }, { status: 401 })
     }
 
     // Verify password
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) {
-      return NextResponse.json({ error: 'Email atau password salah' }, { status: 401 })
+      return NextResponse.json({ error: 'Username atau password salah' }, { status: 401 })
     }
 
     // Create session
     const token = await createSession({
       id: user.id,
       name: user.name,
-      email: user.email,
       role: user.role
     })
 
     const response = NextResponse.json({
-      user: { id: user.id, name: user.name, email: user.email, role: user.role }
+      user: { id: user.id, name: user.name, username: user.username, role: user.role }
     })
 
     response.cookies.set('auth-token', token, {

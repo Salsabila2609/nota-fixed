@@ -1,5 +1,4 @@
-import vision from '@google-cloud/vision'
-import path from 'path'
+import * as vision from '@google-cloud/vision'
 
 export type OCRResult = {
   raw_text: string
@@ -9,11 +8,15 @@ export type OCRResult = {
   date: string | null
 }
 
+// ── Cache client supaya tidak re-auth di setiap panggilan ──────────────────
+let _client: vision.ImageAnnotatorClient | null = null
 function getClient() {
+  if (_client) return _client
   const credentials = JSON.parse(
     Buffer.from(process.env.GOOGLE_CREDENTIALS_BASE64!, 'base64').toString('utf-8')
   )
-  return new vision.ImageAnnotatorClient({ credentials })
+  _client = new vision.ImageAnnotatorClient({ credentials })
+  return _client
 }
 
 function detectCategory(text: string): string {
@@ -212,24 +215,83 @@ function buildDescription(text: string, category: string): string {
   return lines[0] ? `${labels[category]} - ${lines[0]}` : labels[category]
 }
 
+// ── Parse hasil mentah dari Vision API jadi OCRResult ───────────────────────
+function parseOCRText(raw_text: string): OCRResult {
+  if (!raw_text.trim()) {
+    return { raw_text: '', amount: null, category: 'lainnya', description: '', date: null }
+  }
+  const category = detectCategory(raw_text)
+  const amount = extractAmount(raw_text, category)
+  const description = buildDescription(raw_text, category)
+  const date = extractDate(raw_text)
+  return { raw_text, amount, category, description, date }
+}
+
+/**
+ * OCR untuk satu gambar (dipakai jika hanya ada 1 file).
+ */
 export async function runOCR(imageBuffer: Buffer): Promise<OCRResult> {
   try {
     const client = getClient()
     const [result] = await client.textDetection({ image: { content: imageBuffer } })
     const raw_text = result.fullTextAnnotation?.text || ''
-
-    if (!raw_text.trim()) {
-      return { raw_text: '', amount: null, category: 'lainnya', description: '', date: null }
-    }
-
-    const category = detectCategory(raw_text)
-    const amount = extractAmount(raw_text, category)
-    const description = buildDescription(raw_text, category)
-    const date = extractDate(raw_text)
-
-    return { raw_text, amount, category, description, date }
+    return parseOCRText(raw_text)
   } catch (err) {
     console.error('Google Vision OCR error:', err)
     return { raw_text: '', amount: null, category: 'lainnya', description: '', date: null }
+  }
+}
+
+/**
+ * OCR untuk banyak gambar sekaligus dalam 1 API call (batchAnnotateImages).
+ * Jauh lebih cepat dibanding memanggil runOCR() berkali-kali secara paralel,
+ * karena hanya ada 1 network round-trip ke Google Vision.
+ *
+ * Hasil dikembalikan dalam urutan yang sama dengan input buffers.
+ * Jika satu gambar gagal di-OCR, gambar lain tetap dapat hasilnya
+ * (errornya di-fallback ke OCRResult kosong untuk index tersebut).
+ */
+export async function runOCRBatch(imageBuffers: Buffer[]): Promise<OCRResult[]> {
+  if (imageBuffers.length === 0) return []
+
+  // Google Vision batchAnnotateImages punya limit ~16 requests per call.
+  // Kalau suatu saat ada >16 gambar, pecah jadi beberapa batch.
+  const BATCH_LIMIT = 16
+  const chunks: Buffer[][] = []
+  for (let i = 0; i < imageBuffers.length; i += BATCH_LIMIT) {
+    chunks.push(imageBuffers.slice(i, i + BATCH_LIMIT))
+  }
+
+  const allResults: OCRResult[] = []
+
+  try {
+    const client = getClient()
+
+    for (const chunk of chunks) {
+      const requests = chunk.map(buffer => ({
+        image: { content: buffer },
+        features: [{ type: 'TEXT_DETECTION' as const }],
+      }))
+
+      const [response] = await client.batchAnnotateImages({ requests })
+      const responses = response.responses || []
+
+      for (let i = 0; i < chunk.length; i++) {
+        const res = responses[i]
+        if (res?.error) {
+          console.error('Vision batch item error:', res.error.message)
+          allResults.push({ raw_text: '', amount: null, category: 'lainnya', description: '', date: null })
+          continue
+        }
+        const raw_text = res?.fullTextAnnotation?.text || ''
+        allResults.push(parseOCRText(raw_text))
+      }
+    }
+
+    return allResults
+  } catch (err) {
+    console.error('Google Vision batch OCR error:', err)
+    // Fallback: kembalikan hasil kosong untuk semua gambar agar proses lain tetap jalan
+    return imageBuffers.map(() => ({ raw_text: '', amount: null, category: 'lainnya', description: '', date: null }))
   }
 }

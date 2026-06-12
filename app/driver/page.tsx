@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import EditModal from '@/components/EditModal'
+import Pagination from '@/components/Pagination'
 import {
   LogOut, LayoutGrid, List, Camera, ImagePlus, Eye, EyeOff, X,
   ReceiptText, Car, Fuel, ParkingCircle, AlertTriangle, Pencil, Trash2,
@@ -543,6 +544,10 @@ export default function DriverPage() {
   const [totalKonteks, setTotalKonteks] = useState(0)
   const [highValueItems, setHighValueItems] = useState<HighValueItem[] | null>(null)
 
+  const PAGE_SIZE_LIST = 10
+  const PAGE_SIZE_GRID = 12
+  const [currentPage, setCurrentPage] = useState(1)
+
   const fileRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
 
@@ -684,9 +689,14 @@ export default function DriverPage() {
     })
   }
 
+  const PAGE_SIZE = viewMode === 'grid' ? PAGE_SIZE_GRID : PAGE_SIZE_LIST
   const filteredForView = needsProofFilter
     ? submissions.filter(s => (s.amount ?? 0) > HIGH_VALUE_THRESHOLD && !s.proof_image_path)
     : getFiltered(periodFilter)
+  const pagedItems = filteredForView.slice(
+  (currentPage - 1) * PAGE_SIZE,
+  currentPage * PAGE_SIZE
+  )
   const countAll   = getFiltered('all').length
   const needsProofCount = submissions.filter(s =>
     (s.amount ?? 0) > HIGH_VALUE_THRESHOLD && !s.proof_image_path
@@ -765,7 +775,7 @@ export default function DriverPage() {
             <span style={{ fontSize: 12, color: '#aaa', fontWeight: 600 }}>Filter berdasarkan:</span>
             <div style={{ display: 'flex', borderRadius: 10, border: `1.5px solid ${IOH.border}`, overflow: 'hidden', background: IOH.white }}>
               {(['submission', 'bill'] as const).map(key => (
-                <button key={key} className="date-toggle-btn" onClick={() => setDateFilterBy(key)} style={{
+                <button key={key} className="date-toggle-btn" onClick={() => { setDateFilterBy(key); setCurrentPage(1) }} style={{
                   padding: '6px 12px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
                   background: dateFilterBy === key ? IOH.charcoal : 'transparent',
                   color: dateFilterBy === key ? '#fff' : '#aaa',
@@ -781,7 +791,7 @@ export default function DriverPage() {
           {/* ── STATS: 4 period cards ── */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 22 }}>
             {PERIODS.map(p => (
-              <button key={p.key} className="period-tab" onClick={() => { setPeriodFilter(p.key); setNeedsProofFilter(false) }} style={{
+              <button key={p.key} className="period-tab" onClick={() => { setPeriodFilter(p.key); setNeedsProofFilter(false); setCurrentPage(1) }} style={{
                 background: periodFilter === p.key ? p.accent : IOH.white,
                 borderRadius: 14, padding: '14px 10px',
                 boxShadow: periodFilter === p.key ? `0 4px 16px ${p.accent}40` : '0 1px 6px rgba(0,0,0,0.06)',
@@ -813,7 +823,7 @@ export default function DriverPage() {
                   </span>
                 </div>
                 <button
-                  onClick={() => { setPeriodFilter('all'); setNeedsProofFilter(true) }}
+                  onClick={() => { setPeriodFilter('all'); setNeedsProofFilter(true); setCurrentPage(1) }}
                   style={{
                     flexShrink: 0, padding: '7px 12px', borderRadius: 9,
                     border: '1.5px solid #F59E0B', background: '#F59E0B',
@@ -888,7 +898,7 @@ export default function DriverPage() {
                 </div>
                 {needsProofFilter && (
                   <button
-                    onClick={() => setNeedsProofFilter(false)}
+                    onClick={() => { setNeedsProofFilter(false); setCurrentPage(1) }}
                     style={{
                       padding: '5px 10px', borderRadius: 8,
                       border: `1.5px solid ${IOH.border}`, background: IOH.white,
@@ -904,29 +914,131 @@ export default function DriverPage() {
               {filteredForView.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 0', color: '#ccc', fontSize: 13 }}>Tidak ada nota untuk periode ini</div>
               ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                  {filteredForView.map((sub, i) => {
-                    const catCfg = CATEGORY_CONFIG[sub.category] || CATEGORY_CONFIG.lainnya
-                    const CatIcon = catCfg.Icon
-                    return (
-                      <div key={sub.id} style={{ borderRadius: 12, overflow: 'hidden', background: IOH.white, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', border: `1px solid ${IOH.border}`, display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ position: 'relative', aspectRatio: '3/4', background: '#f0f0f0', cursor: 'zoom-in' }}
-                          onClick={() => sub.image_url && setLightbox(sub.image_url)}>
-                          {sub.image_url
-                            ? <img src={sub.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="nota" />
-                            : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><ReceiptText size={28} color="#ccc" /></div>
-                          }
-                          <div style={{ position: 'absolute', top: 5, left: 5, background: 'rgba(0,0,0,0.75)', color: '#fff', borderRadius: 5, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{i + 1}</div>
-                          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.72)', padding: '5px 7px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                              <CatIcon size={9} color={catCfg.color} strokeWidth={2.5} />
-                              <span style={{ fontSize: 9, color: '#ddd' }}>{catCfg.label}</span>
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    {pagedItems.map((sub, i) => {
+                      const catCfg = CATEGORY_CONFIG[sub.category] || CATEGORY_CONFIG.lainnya
+                      const CatIcon = catCfg.Icon
+                      return (
+                        <div key={sub.id} style={{ borderRadius: 12, overflow: 'hidden', background: IOH.white, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', border: `1px solid ${IOH.border}`, display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ position: 'relative', aspectRatio: '3/4', background: '#f0f0f0', cursor: 'zoom-in' }}
+                            onClick={() => sub.image_url && setLightbox(sub.image_url)}>
+                            {sub.image_url
+                              ? <img src={sub.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="nota" />
+                              : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><ReceiptText size={28} color="#ccc" /></div>
+                            }
+                            <div style={{ position: 'absolute', top: 5, left: 5, background: 'rgba(0,0,0,0.75)', color: '#fff', borderRadius: 5, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{i + 1}</div>
+                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.72)', padding: '5px 7px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+                                <CatIcon size={9} color={catCfg.color} strokeWidth={2.5} />
+                                <span style={{ fontSize: 9, color: '#ddd' }}>{catCfg.label}</span>
+                              </div>
+                              {sub.amount ? <div style={{ fontSize: 10, color: IOH.yellow, fontWeight: 700 }}>Rp {new Intl.NumberFormat('id-ID').format(sub.amount)}</div> : <div style={{ fontSize: 9, color: '#FF8A8A' }}>⚠ Kosong</div>}
+                              {needsProof(sub) && (
+                                <div
+                                  onClick={e => {
+                                    e.stopPropagation()   
+                                    setHighValueItems([{
+                                      submissionId: sub.id,
+                                      filename: `${CATEGORY_CONFIG[sub.category]?.label || sub.category} – ${formatDate(sub.submission_date)}`,
+                                      amount: sub.amount!,
+                                      imageUrl: sub.image_url,
+                                      confirmed: true,
+                                    }])
+                                  }}
+                                  style={{
+                                    marginTop: 4, padding: '4px 7px', borderRadius: 6,
+                                    background: '#F59E0B', border: 'none',
+                                    fontSize: 9, fontWeight: 700, color: '#fff',
+                                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
+                                    width: 'fit-content',
+                                  }}
+                                >
+                                  ⚠ Upload Bukti
+                                </div>
+                              )}
                             </div>
-                            {sub.amount ? <div style={{ fontSize: 10, color: IOH.yellow, fontWeight: 700 }}>Rp {new Intl.NumberFormat('id-ID').format(sub.amount)}</div> : <div style={{ fontSize: 9, color: '#FF8A8A' }}>⚠ Kosong</div>}
+                          </div>
+                          <div style={{ display: 'flex', borderTop: `1px solid ${IOH.border}` }}>
+                            <button onClick={() => setEditingSubmission(sub)} style={{ flex: 1, padding: '10px 0', border: 'none', borderRight: `1px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: IOH.charcoal, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              <Pencil size={12} />
+                            </button>
+                            <button onClick={() => setDeleteTarget(sub)} style={{ flex: 1, padding: '10px 0', border: 'none', background: IOH.white, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: IOH.red, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                              <Trash2 size={12} /> 
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <Pagination
+                    currentPage={currentPage}
+                    totalItems={filteredForView.length}
+                    pageSize={PAGE_SIZE_GRID}
+                    onPageChange={setCurrentPage}
+                  />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── LIST VIEW ── */}
+          {viewMode === 'list' && (
+            <>
+              <div className="fade-in">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>
+                    {needsProofFilter ? '⚠️ Butuh Bukti Transfer' : 'Riwayat Nota'}
+                    {' '}<span style={{ color: '#bbb', fontSize: 13, fontWeight: 400 }}>({filteredForView.length})</span>
+                  </div>
+                  {needsProofFilter && (
+                    <button
+                      onClick={() => { setNeedsProofFilter(false); setCurrentPage(1) }}
+                      style={{
+                        padding: '5px 10px', borderRadius: 8,
+                        border: `1.5px solid ${IOH.border}`, background: IOH.white,
+                        fontSize: 11, fontWeight: 700, color: '#aaa', cursor: 'pointer',
+                        fontFamily: "'Plus Jakarta Sans', sans-serif",
+                        display: 'flex', alignItems: 'center', gap: 4,
+                      }}
+                    >
+                      <X size={10} /> Hapus filter
+                    </button>
+                  )}
+                </div>
+                {loading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+                    <div style={{ width: 32, height: 32, border: `3px solid ${IOH.yellow}`, borderTopColor: IOH.red, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                  </div>
+                ) : filteredForView.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '50px 0', color: '#ccc', fontSize: 14 }}>Belum ada nota</div>
+                ) : (
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    {pagedItems.map(sub => {
+                      const catCfg = CATEGORY_CONFIG[sub.category] || CATEGORY_CONFIG.lainnya
+                      const CatIcon = catCfg.Icon
+                      return (
+                        <div key={sub.id} className="nota-card" style={{ background: IOH.white, borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'flex-start', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1px solid ${IOH.border}` }}>
+                          {sub.image_url && (
+                            <img src={sub.image_url} style={{ width: 50, height: 62, objectFit: 'cover', borderRadius: 9, cursor: 'zoom-in', flexShrink: 0, border: `1px solid ${IOH.border}` }} alt="nota" onClick={() => setLightbox(sub.image_url!)} />
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: catCfg.bg, color: catCfg.color }}>
+                                <CatIcon size={10} strokeWidth={2.5} /> {catCfg.label}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 11, color: '#bbb', marginBottom: 3 }}>
+                              Submit: {formatDate(sub.submission_date)}
+                              {sub.bill_date && sub.bill_date !== sub.submission_date && (
+                                <span style={{ marginLeft: 6, color: IOH.red, fontWeight: 600 }}>• Struk: {formatDate(sub.bill_date)}</span>
+                              )}
+                            </div>
+                            {sub.amount ? <div style={{ fontSize: 14, color: '#111', fontWeight: 800 }}>{formatAmount(sub.amount)}</div> : <div style={{ fontSize: 12, color: '#FF8A8A', fontWeight: 600 }}>⚠ Nominal kosong</div>}
+                            {sub.category === 'lainnya' && sub.description && <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>{sub.description}</div>}
                             {needsProof(sub) && (
                               <div
-                                onClick={e => {
-                                  e.stopPropagation()   
+                                onClick={() => {
                                   setHighValueItems([{
                                     submissionId: sub.id,
                                     filename: `${CATEGORY_CONFIG[sub.category]?.label || sub.category} – ${formatDate(sub.submission_date)}`,
@@ -936,133 +1048,47 @@ export default function DriverPage() {
                                   }])
                                 }}
                                 style={{
-                                  marginTop: 4, padding: '4px 7px', borderRadius: 6,
-                                  background: '#F59E0B', border: 'none',
-                                  fontSize: 9, fontWeight: 700, color: '#fff',
-                                  cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3,
-                                  width: 'fit-content',
+                                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                                  marginTop: 5, padding: '4px 9px', borderRadius: 8,
+                                  background: '#FFFBEB', border: '1.5px solid #FFE082',
+                                  fontSize: 11, fontWeight: 700, color: '#D97706',
+                                  cursor: 'pointer',
                                 }}
                               >
-                                ⚠ Upload Bukti
+                                ⚠️ Upload bukti transfer
                               </div>
                             )}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', borderTop: `1px solid ${IOH.border}` }}>
-                          <button onClick={() => setEditingSubmission(sub)} style={{ flex: 1, padding: '10px 0', border: 'none', borderRight: `1px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: IOH.charcoal, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                            <Pencil size={12} />
-                          </button>
-                          <button onClick={() => setDeleteTarget(sub)} style={{ flex: 1, padding: '10px 0', border: 'none', background: IOH.white, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 11, fontWeight: 700, color: IOH.red, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                            <Trash2 size={12} /> 
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── LIST VIEW ── */}
-          {viewMode === 'list' && (
-            <div className="fade-in">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>
-                  {needsProofFilter ? '⚠️ Butuh Bukti Transfer' : 'Riwayat Nota'}
-                  {' '}<span style={{ color: '#bbb', fontSize: 13, fontWeight: 400 }}>({filteredForView.length})</span>
-                </div>
-                {needsProofFilter && (
-                  <button
-                    onClick={() => setNeedsProofFilter(false)}
-                    style={{
-                      padding: '5px 10px', borderRadius: 8,
-                      border: `1.5px solid ${IOH.border}`, background: IOH.white,
-                      fontSize: 11, fontWeight: 700, color: '#aaa', cursor: 'pointer',
-                      fontFamily: "'Plus Jakarta Sans', sans-serif",
-                      display: 'flex', alignItems: 'center', gap: 4,
-                    }}
-                  >
-                    <X size={10} /> Hapus filter
-                  </button>
-                )}
-              </div>
-              {loading ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-                  <div style={{ width: 32, height: 32, border: `3px solid ${IOH.yellow}`, borderTopColor: IOH.red, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                </div>
-              ) : filteredForView.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '50px 0', color: '#ccc', fontSize: 14 }}>Belum ada nota</div>
-              ) : (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {filteredForView.map(sub => {
-                    const catCfg = CATEGORY_CONFIG[sub.category] || CATEGORY_CONFIG.lainnya
-                    const CatIcon = catCfg.Icon
-                    return (
-                      <div key={sub.id} className="nota-card" style={{ background: IOH.white, borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'flex-start', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', border: `1px solid ${IOH.border}` }}>
-                        {sub.image_url && (
-                          <img src={sub.image_url} style={{ width: 50, height: 62, objectFit: 'cover', borderRadius: 9, cursor: 'zoom-in', flexShrink: 0, border: `1px solid ${IOH.border}` }} alt="nota" onClick={() => setLightbox(sub.image_url!)} />
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: catCfg.bg, color: catCfg.color }}>
-                              <CatIcon size={10} strokeWidth={2.5} /> {catCfg.label}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 11, color: '#bbb', marginBottom: 3 }}>
-                            Submit: {formatDate(sub.submission_date)}
-                            {sub.bill_date && sub.bill_date !== sub.submission_date && (
-                              <span style={{ marginLeft: 6, color: IOH.red, fontWeight: 600 }}>• Struk: {formatDate(sub.bill_date)}</span>
+                            {sub.ocr_raw_text && (
+                              <button onClick={() => setExpandOcr(expandOcr === sub.id ? null : sub.id)} style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 10, cursor: 'pointer', padding: '3px 0', display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                                {expandOcr === sub.id ? <EyeOff size={10} /> : <Eye size={10} />}
+                                {expandOcr === sub.id ? 'Sembunyikan OCR' : 'Lihat teks OCR'}
+                              </button>
+                            )}
+                            {expandOcr === sub.id && sub.ocr_raw_text && (
+                              <div style={{ marginTop: 5, padding: '7px 9px', background: '#F8F8FA', borderRadius: 7, fontSize: 10, color: '#aaa', whiteSpace: 'pre-wrap', maxHeight: 100, overflowY: 'auto', border: `1px solid ${IOH.border}`, lineHeight: 1.6 }}>{sub.ocr_raw_text}</div>
                             )}
                           </div>
-                          {sub.amount ? <div style={{ fontSize: 14, color: '#111', fontWeight: 800 }}>{formatAmount(sub.amount)}</div> : <div style={{ fontSize: 12, color: '#FF8A8A', fontWeight: 600 }}>⚠ Nominal kosong</div>}
-                          {sub.category === 'lainnya' && sub.description && <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>{sub.description}</div>}
-                          {needsProof(sub) && (
-                            <div
-                              onClick={() => {
-                                setHighValueItems([{
-                                  submissionId: sub.id,
-                                  filename: `${CATEGORY_CONFIG[sub.category]?.label || sub.category} – ${formatDate(sub.submission_date)}`,
-                                  amount: sub.amount!,
-                                  imageUrl: sub.image_url,
-                                  confirmed: true,
-                                }])
-                              }}
-                              style={{
-                                display: 'inline-flex', alignItems: 'center', gap: 5,
-                                marginTop: 5, padding: '4px 9px', borderRadius: 8,
-                                background: '#FFFBEB', border: '1.5px solid #FFE082',
-                                fontSize: 11, fontWeight: 700, color: '#D97706',
-                                cursor: 'pointer',
-                              }}
-                            >
-                              ⚠️ Upload bukti transfer
-                            </div>
-                          )}
-                          {sub.ocr_raw_text && (
-                            <button onClick={() => setExpandOcr(expandOcr === sub.id ? null : sub.id)} style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 10, cursor: 'pointer', padding: '3px 0', display: 'flex', alignItems: 'center', gap: 4, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                              {expandOcr === sub.id ? <EyeOff size={10} /> : <Eye size={10} />}
-                              {expandOcr === sub.id ? 'Sembunyikan OCR' : 'Lihat teks OCR'}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
+                            <button onClick={() => setEditingSubmission(sub)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: IOH.white, border: `1.5px solid ${IOH.border}`, borderRadius: 9, color: IOH.charcoal, cursor: 'pointer', fontSize: 11, padding: '9px 13px', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              <Pencil size={11} />
                             </button>
-                          )}
-                          {expandOcr === sub.id && sub.ocr_raw_text && (
-                            <div style={{ marginTop: 5, padding: '7px 9px', background: '#F8F8FA', borderRadius: 7, fontSize: 10, color: '#aaa', whiteSpace: 'pre-wrap', maxHeight: 100, overflowY: 'auto', border: `1px solid ${IOH.border}`, lineHeight: 1.6 }}>{sub.ocr_raw_text}</div>
-                          )}
+                            <button onClick={() => setDeleteTarget(sub)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: IOH.white, border: `1.5px solid ${IOH.border}`, borderRadius: 9, color: IOH.red, cursor: 'pointer', fontSize: 11, padding: '9px 13px', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              <Trash2 size={11} />
+                            </button>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
-                          <button onClick={() => setEditingSubmission(sub)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: IOH.white, border: `1.5px solid ${IOH.border}`, borderRadius: 9, color: IOH.charcoal, cursor: 'pointer', fontSize: 11, padding: '9px 13px', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            <Pencil size={11} />
-                          </button>
-                          <button onClick={() => setDeleteTarget(sub)} style={{ display: 'flex', alignItems: 'center', gap: 5, background: IOH.white, border: `1.5px solid ${IOH.border}`, borderRadius: 9, color: IOH.red, cursor: 'pointer', fontSize: 11, padding: '9px 13px', fontFamily: "'Plus Jakarta Sans', sans-serif", fontWeight: 600, whiteSpace: 'nowrap' }}>
-                            <Trash2 size={11} />
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+              <Pagination
+                currentPage={currentPage}
+                totalItems={filteredForView.length}
+                pageSize={PAGE_SIZE_LIST}
+                onPageChange={setCurrentPage}
+              />
+            </>
           )}
         </div>
       </div>

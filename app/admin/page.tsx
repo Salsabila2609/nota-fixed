@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import EditModal from '@/components/EditModal'
+import Pagination from '@/components/Pagination'
 import AdminUploadSection from '@/components/AdminUploadSection'
 import ExportExcelButton from '@/components/ExportExcelButton'
 import {
@@ -26,6 +27,10 @@ const IOH = {
 
 const HIGH_VALUE_THRESHOLD = 250000
 
+// ── Page sizes — adjust these to test pagination ───────────────────────────
+const PAGE_SIZE_LIST = 10
+const PAGE_SIZE_GRID = 24
+
 type Driver = { id: string; name: string; email: string }
 type Submission = {
   id: string; driver_id: string; driver_name: string; category: string
@@ -40,9 +45,6 @@ const CATEGORY_CONFIG: Record<string, { label: string; Icon: any; color: string;
   bensin:  { label: 'Bensin',  Icon: Fuel,          color: '#B8960A', bg: '#FFFBEB' },
   lainnya: { label: 'Lainnya', Icon: ReceiptText,   color: '#4D4D4F', bg: '#F3F3F4' },
 }
-
-// Only show description for 'lainnya' category
-const showDescription = (sub: Submission) => sub.category === 'lainnya' && sub.description
 
 function getMissingFields(sub: Submission): string[] {
   const missing: string[] = []
@@ -161,7 +163,7 @@ function PhotoReplaceBtn({ submissionId, onReplaced }: { submissionId: string; o
   )
 }
 
-// ── Bill Reviewer Modal (Swipeable + Inline Edit + Paginated Thumbnails) ──
+// ── Bill Reviewer Modal ────────────────────────────────────────────────────
 const inlineInputStyle: React.CSSProperties = {
   width: '100%', padding: '8px 11px', borderRadius: 10,
   border: `1.5px solid ${IOH.border}`,
@@ -201,12 +203,10 @@ function BillReviewerModal({
 
   const sub = submissions[idx]
 
-  // Keep thumbPage in sync when idx changes (e.g. arrow key nav)
   useEffect(() => {
     setThumbPage(Math.floor(idx / THUMB_PAGE_SIZE))
   }, [idx])
 
-  // Reset draft + localImageUrl whenever nota changes
   useEffect(() => {
     if (!sub) return
     setDraft({
@@ -221,7 +221,6 @@ function BillReviewerModal({
   }, [idx, sub?.id])
 
   const displayImageUrl = localImageUrl ?? sub?.image_url
-
   const catCfg = CATEGORY_CONFIG[draft.category] || CATEGORY_CONFIG.lainnya
 
   const isDirty =
@@ -287,7 +286,6 @@ function BillReviewerModal({
 
   if (!sub) return null
 
-  // Thumbnail pagination
   const totalThumbPages = Math.ceil(submissions.length / THUMB_PAGE_SIZE)
   const thumbStart = thumbPage * THUMB_PAGE_SIZE
   const thumbEnd   = Math.min(thumbStart + THUMB_PAGE_SIZE, submissions.length)
@@ -298,10 +296,9 @@ function BillReviewerModal({
       style={{ position: 'fixed', inset: 0, background: 'rgba(77,77,79,0.45)', backdropFilter: 'blur(8px)', zIndex: 1100, display: 'flex', flexDirection: 'column', fontFamily: "'Plus Jakarta Sans', sans-serif" }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      {/* ── Modal container ── */}
       <div style={{ position: 'absolute', inset: 20, background: IOH.bg, borderRadius: 24, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,0.22)' }}>
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div style={{ background: IOH.white, borderBottom: `1px solid ${IOH.border}`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, background: catCfg.bg, border: `1px solid ${catCfg.color}22` }}>
@@ -336,13 +333,12 @@ function BillReviewerModal({
           </div>
         </div>
 
-        {/* ── Body ── */}
+        {/* Body */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
 
-          {/* ── Photo panel ── */}
+          {/* Photo panel */}
           <div style={{ flex: '0 0 52%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '16px 28px', gap: 10, borderRight: `1px solid ${IOH.border}`, background: '#FAFAFA', overflowY: 'auto', minHeight: 0 }}>
 
-            {/* Photo frame */}
             <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', background: IOH.white, border: `1px solid ${IOH.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100vh - 300px)' }}>
               {displayImageUrl
                 ? <img src={displayImageUrl} alt="nota" style={{ maxWidth: '100%', maxHeight: 'calc(100vh - 320px)', objectFit: 'contain', display: 'block' }} />
@@ -353,7 +349,6 @@ function BillReviewerModal({
               }
             </div>
 
-            {/* Ganti foto button */}
             <div>
               <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoReplace} />
               <button onClick={() => fileRef.current?.click()} disabled={photoUploading} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 10, border: `1.5px solid ${IOH.teal}66`, background: IOH.teal + '12', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: IOH.teal, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -364,9 +359,8 @@ function BillReviewerModal({
               </button>
             </div>
 
-            {/* ── Paginated Thumbnail strip ── */}
+            {/* Thumbnail strip */}
             <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {/* Thumbnails row */}
               <div style={{ display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'nowrap' }}>
                 {thumbSlice.map((s, relI) => {
                   const absI = thumbStart + relI
@@ -390,39 +384,20 @@ function BillReviewerModal({
                 })}
               </div>
 
-              {/* Pagination controls — only show if > 1 page */}
               {totalThumbPages > 1 && (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  <button
-                    onClick={() => setThumbPage(p => Math.max(0, p - 1))}
-                    disabled={thumbPage === 0}
-                    style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: thumbPage === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === 0 ? 0.3 : 1 }}
-                  >
+                  <button onClick={() => setThumbPage(p => Math.max(0, p - 1))} disabled={thumbPage === 0} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: thumbPage === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === 0 ? 0.3 : 1 }}>
                     <ChevronLeft size={12} color={IOH.charcoal} />
                   </button>
-
-                  {/* Page dots */}
                   <div style={{ display: 'flex', gap: 4 }}>
                     {Array.from({ length: totalThumbPages }).map((_, pi) => (
-                      <div
-                        key={pi}
-                        onClick={() => setThumbPage(pi)}
-                        style={{ width: pi === thumbPage ? 18 : 6, height: 6, borderRadius: 3, background: pi === thumbPage ? IOH.red : IOH.border, cursor: 'pointer', transition: 'all 0.2s' }}
-                      />
+                      <div key={pi} onClick={() => setThumbPage(pi)} style={{ width: pi === thumbPage ? 18 : 6, height: 6, borderRadius: 3, background: pi === thumbPage ? IOH.red : IOH.border, cursor: 'pointer', transition: 'all 0.2s' }} />
                     ))}
                   </div>
-
-                  <button
-                    onClick={() => setThumbPage(p => Math.min(totalThumbPages - 1, p + 1))}
-                    disabled={thumbPage === totalThumbPages - 1}
-                    style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: thumbPage === totalThumbPages - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === totalThumbPages - 1 ? 0.3 : 1 }}
-                  >
+                  <button onClick={() => setThumbPage(p => Math.min(totalThumbPages - 1, p + 1))} disabled={thumbPage === totalThumbPages - 1} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: thumbPage === totalThumbPages - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === totalThumbPages - 1 ? 0.3 : 1 }}>
                     <ChevronRight size={12} color={IOH.charcoal} />
                   </button>
-
-                  <span style={{ fontSize: 10, color: '#bbb', fontWeight: 600 }}>
-                    {thumbStart + 1}–{thumbEnd} / {submissions.length}
-                  </span>
+                  <span style={{ fontSize: 10, color: '#bbb', fontWeight: 600 }}>{thumbStart + 1}–{thumbEnd} / {submissions.length}</span>
                 </div>
               )}
             </div>
@@ -430,20 +405,18 @@ function BillReviewerModal({
             <div style={{ fontSize: 11, color: '#ccc', textAlign: 'center' }}>← → navigasi · Esc tutup</div>
           </div>
 
-          {/* ── Data / Edit panel ── */}
+          {/* Data / Edit panel */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 80px', display: 'flex', flexDirection: 'column', gap: 0, minHeight: 0 }}>
             <div style={{ background: IOH.white, borderRadius: 16, border: `1px solid ${IOH.border}`, overflow: 'visible', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
 
               <div style={{ padding: '16px 18px 4px' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>Data Nota #{idx + 1}</div>
 
-                {/* Nama Driver — read-only */}
                 <div style={{ marginBottom: 13 }}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Nama Driver</label>
                   <div style={{ fontSize: 13, fontWeight: 700, color: IOH.charcoal, padding: '6px 0' }}>{sub.driver_name}</div>
                 </div>
 
-                {/* Kategori */}
                 <div style={{ marginBottom: 13 }}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Kategori</label>
                   <select value={draft.category} onChange={e => setDraft(d => ({ ...d, category: e.target.value }))} style={{ ...inlineInputStyle, appearance: 'none' }}>
@@ -454,19 +427,16 @@ function BillReviewerModal({
                   </select>
                 </div>
 
-                {/* Nominal */}
                 <div style={{ marginBottom: 13 }}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Nominal (Rp)</label>
                   <input type="number" min={0} value={draft.amount} onChange={e => setDraft(d => ({ ...d, amount: e.target.value }))} placeholder="0" style={inlineInputStyle} />
                 </div>
 
-                {/* Tanggal Struk */}
                 <div style={{ marginBottom: 13 }}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Tanggal Struk</label>
                   <input type="date" value={draft.bill_date} onChange={e => setDraft(d => ({ ...d, bill_date: e.target.value }))} style={inlineInputStyle} />
                 </div>
 
-                {/* Tanggal Submit — read-only */}
                 <div style={{ marginBottom: 13 }}>
                   <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Tanggal Submit</label>
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#bbb', padding: '6px 0' }}>
@@ -474,7 +444,6 @@ function BillReviewerModal({
                   </div>
                 </div>
 
-                {/* Keterangan — ONLY for 'lainnya' category */}
                 {draft.category === 'lainnya' && (
                   <div style={{ marginBottom: 6 }}>
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Keterangan</label>
@@ -483,7 +452,7 @@ function BillReviewerModal({
                 )}
               </div>
 
-              {/* OCR section */}
+              {/* OCR */}
               <div style={{ borderTop: `1px solid ${IOH.border}` }}>
                 <button onClick={() => setShowOcr(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -502,23 +471,15 @@ function BillReviewerModal({
                   </div>
                 )}
               </div>
- 
-              {/* Bukti Transfer section — hanya kalau amount >250rb */}
+
+              {/* Bukti Transfer */}
               {(sub.amount ?? 0) > HIGH_VALUE_THRESHOLD && (
                 <div style={{ borderTop: `1px solid ${IOH.border}` }}>
                   <button onClick={() => setShowProof(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      {sub.proof_image_url
-                        ? <CheckCircle2 size={13} color={IOH.teal} />
-                        : <AlertTriangle size={13} color="#D97706" />
-                      }
-                      <span style={{ fontSize: 12, fontWeight: 700, color: sub.proof_image_url ? IOH.teal : '#D97706' }}>
-                        Bukti Transfer Bank
-                      </span>
-                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, fontWeight: 700,
-                        background: sub.proof_image_url ? IOH.teal + '18' : '#FFFBEB',
-                        color: sub.proof_image_url ? IOH.teal : '#D97706',
-                      }}>
+                      {sub.proof_image_url ? <CheckCircle2 size={13} color={IOH.teal} /> : <AlertTriangle size={13} color="#D97706" />}
+                      <span style={{ fontSize: 12, fontWeight: 700, color: sub.proof_image_url ? IOH.teal : '#D97706' }}>Bukti Transfer Bank</span>
+                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, fontWeight: 700, background: sub.proof_image_url ? IOH.teal + '18' : '#FFFBEB', color: sub.proof_image_url ? IOH.teal : '#D97706' }}>
                         {sub.proof_image_url ? 'Ada' : 'Belum'}
                       </span>
                     </div>
@@ -528,10 +489,7 @@ function BillReviewerModal({
                     <div style={{ padding: '0 18px 16px' }}>
                       {sub.proof_image_url ? (
                         <>
-                          <div
-                            onClick={() => setProofLightbox(sub.proof_image_url!)}
-                            style={{ borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${IOH.teal}55`, cursor: 'zoom-in', marginBottom: 8, background: '#f8f8f8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          >
+                          <div onClick={() => setProofLightbox(sub.proof_image_url!)} style={{ borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${IOH.teal}55`, cursor: 'zoom-in', marginBottom: 8, background: '#f8f8f8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <img src={sub.proof_image_url} alt="bukti transfer" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', display: 'block' }} />
                           </div>
                           <div style={{ fontSize: 11, color: '#bbb', textAlign: 'center' }}>Klik untuk perbesar</div>
@@ -549,19 +507,7 @@ function BillReviewerModal({
 
               {/* Save button */}
               <div style={{ padding: '14px 18px', borderTop: `1px solid ${IOH.border}` }}>
-                <button
-                  onClick={handleSave}
-                  disabled={!isDirty || saving}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    padding: '11px 0', borderRadius: 12, border: 'none',
-                    cursor: isDirty && !saving ? 'pointer' : 'not-allowed',
-                    background: savedFlash ? IOH.teal : isDirty && !saving ? IOH.yellow : IOH.border,
-                    fontSize: 13, fontWeight: 800,
-                    color: savedFlash ? '#fff' : isDirty && !saving ? '#111' : '#bbb',
-                    fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.2s'
-                  }}
-                >
+                <button onClick={handleSave} disabled={!isDirty || saving} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '11px 0', borderRadius: 12, border: 'none', cursor: isDirty && !saving ? 'pointer' : 'not-allowed', background: savedFlash ? IOH.teal : isDirty && !saving ? IOH.yellow : IOH.border, fontSize: 13, fontWeight: 800, color: savedFlash ? '#fff' : isDirty && !saving ? '#111' : '#bbb', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.2s' }}>
                   {saving
                     ? <><div style={{ width: 13, height: 13, border: '2px solid rgba(0,0,0,0.15)', borderTopColor: '#333', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Menyimpan...</>
                     : savedFlash
@@ -573,8 +519,7 @@ function BillReviewerModal({
               </div>
             </div>
 
-
-            {/* dot nav */}
+            {/* Dot nav */}
             <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 6 }}>
               {submissions.slice(Math.max(0, idx - 2), Math.min(submissions.length, idx + 3)).map((_, relI) => {
                 const absI = Math.max(0, idx - 2) + relI
@@ -584,23 +529,21 @@ function BillReviewerModal({
           </div>
         </div>
       </div>
+
       {proofLightbox && (
-        <div
-          onClick={() => setProofLightbox(null)}
-          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.97)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300, padding: 20 }}
-        >
+        <div onClick={() => setProofLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.97)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300, padding: 20 }}>
           <img src={proofLightbox} style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: 10 }} alt="bukti transfer" />
           <button onClick={() => setProofLightbox(null)} style={{ position: 'absolute', top: 16, right: 16, width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <X size={18} color="#fff" />
           </button>
           <div style={{ position: 'absolute', bottom: 16, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Klik di mana saja untuk tutup</div>
         </div>
-      )}      
+      )}
     </div>
   )
 }
 
-// ── Grid View Component ────────────────────────────────────────────────────
+// ── Grid View ──────────────────────────────────────────────────────────────
 function GridView({ submissions, onEdit, onDelete, onReviewOpen, onPhotoReplaced, pageOffset }: {
   submissions: Submission[]
   onEdit: (sub: Submission) => void
@@ -619,38 +562,23 @@ function GridView({ submissions, onEdit, onDelete, onReviewOpen, onPhotoReplaced
         const displayDate = sub.bill_date || sub.submission_date
 
         return (
-          <div key={sub.id} style={{
-            position: 'relative', borderRadius: 12, overflow: 'hidden',
-            background: IOH.white,
-            border: missing.length > 0 ? '2px solid #FFD166' : `1px solid ${IOH.border}`,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.06)', transition: 'transform 0.15s, box-shadow 0.15s',
-          }}
+          <div key={sub.id} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: IOH.white, border: missing.length > 0 ? '2px solid #FFD166' : `1px solid ${IOH.border}`, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', transition: 'transform 0.15s, box-shadow 0.15s' }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.11)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = ''; (e.currentTarget as HTMLElement).style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)' }}
           >
-            {/* Image area */}
-            <div
-              style={{ position: 'relative', aspectRatio: '3/4', background: '#f3f3f4', cursor: 'zoom-in' }}
-              onClick={() => onReviewOpen(i)}
-            >
+            <div style={{ position: 'relative', aspectRatio: '3/4', background: '#f3f3f4', cursor: 'zoom-in' }} onClick={() => onReviewOpen(i)}>
               {sub.image_url
                 ? <img src={sub.image_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="nota" />
                 : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}><ReceiptText size={28} color="#ccc" /></div>
               }
-
-              {/* Number badge */}
               <div style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.75)', color: '#fff', borderRadius: 5, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
                 {(pageOffset || 0) + i + 1}
               </div>
-
-              {/* Warning badge */}
               {missing.length > 0 && (
                 <div title={`Data kosong: ${missing.join(', ')}`} style={{ position: 'absolute', top: 6, right: 60, width: 20, height: 20, borderRadius: '50%', background: '#FFD166', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <AlertTriangle size={11} color="#92400E" />
                 </div>
               )}
-
-              {/* Action buttons — top right */}
               <div style={{ position: 'absolute', top: 4, right: 4, display: 'flex', flexDirection: 'column', gap: 3 }}>
                 <button onClick={e => { e.stopPropagation(); onEdit(sub) }} style={{ width: 28, height: 28, borderRadius: 7, border: 'none', background: 'rgba(255,255,255,0.92)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>
                   <Pencil size={12} color={IOH.charcoal} />
@@ -660,8 +588,6 @@ function GridView({ submissions, onEdit, onDelete, onReviewOpen, onPhotoReplaced
                   <Trash2 size={12} color={IOH.red} />
                 </button>
               </div>
-
-              {/* Bottom info bar */}
               <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.80)', padding: '6px 8px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 1 }}>
                   <catCfg.Icon size={9} color={catCfg.color} strokeWidth={2.5} />
@@ -677,14 +603,11 @@ function GridView({ submissions, onEdit, onDelete, onReviewOpen, onPhotoReplaced
                     {new Date(displayDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: '2-digit' })}
                   </div>
                 )}
-                {/* Description only for lainnya */}
                 {sub.category === 'lainnya' && sub.description && (
                   <div style={{ fontSize: 9, color: '#bbb', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub.description}</div>
                 )}
               </div>
             </div>
-
-            {/* Missing field banner */}
             {missing.length > 0 && (
               <div style={{ padding: '5px 8px', background: '#FFFBEB', borderTop: '1px solid #FFD166', display: 'flex', alignItems: 'center', gap: 4 }}>
                 <AlertTriangle size={10} color="#D97706" />
@@ -717,6 +640,7 @@ export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [reviewerIndex, setReviewerIndex] = useState<number | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(data => {
@@ -728,6 +652,7 @@ export default function AdminPage() {
   }, [])
 
   useEffect(() => { if (user) fetchSubmissions() }, [user, selectedDriver, dateFrom, dateTo])
+  useEffect(() => { setCurrentPage(1) }, [selectedDriver, dateFrom, dateTo, searchQuery, viewMode])
 
   const fetchDrivers = async () => {
     const res = await fetch('/api/drivers')
@@ -771,7 +696,7 @@ export default function AdminPage() {
     router.push('/')
   }
 
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+  const formatDate  = (d: string) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
   const formatAmount = (n: number) => new Intl.NumberFormat('id-ID').format(n)
 
   const filtered = submissions.filter(s =>
@@ -789,6 +714,18 @@ export default function AdminPage() {
 
   const totalAmount  = filtered.reduce((sum, s) => sum + (s.amount || 0), 0)
   const flaggedCount = filtered.filter(s => getMissingFields(s).length > 0).length
+
+  // ── Pagination calculations ────────────────────────────────────────────
+  const pageSize  = viewMode === 'grid' ? PAGE_SIZE_GRID : PAGE_SIZE_LIST
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const safePage  = Math.min(currentPage, totalPages)
+  const pageStart = (safePage - 1) * pageSize
+  const paginated = filtered.slice(pageStart, pageStart + pageSize)
+
+  // ── reviewerIndex points into `filtered` (not `paginated`) ────────────
+  // Grid: pageStart + i  (i is index within paginated slice)
+  // List: pageStart + idx (idx is index within paginated slice)
+  // Both give absolute index in `filtered`, which is what BillReviewerModal expects.
 
   if (!user) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: IOH.bg }}>
@@ -819,7 +756,7 @@ export default function AdminPage() {
 
       <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", minHeight: '100vh', background: IOH.bg }}>
 
-        {/* ── TOPBAR ── */}
+        {/* Topbar */}
         <div style={{ background: IOH.white, borderBottom: `1px solid ${IOH.border}`, position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
           <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -855,7 +792,7 @@ export default function AdminPage() {
 
         <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px 80px' }}>
 
-          {/* ── FILTER PANEL ── */}
+          {/* Filter */}
           <div style={{ background: IOH.white, borderRadius: 18, padding: 22, marginBottom: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
               <div style={{ width: 28, height: 28, borderRadius: 8, background: IOH.red + '15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -893,13 +830,10 @@ export default function AdminPage() {
             </div>
           </div>
 
-          {/* ── ADMIN UPLOAD SECTION ── */}
-          <AdminUploadSection
-            drivers={drivers}
-            onUploadDone={fetchSubmissions}
-          />
+          {/* Admin Upload */}
+          <AdminUploadSection drivers={drivers} onUploadDone={fetchSubmissions} />
 
-          {/* ── STATS STRIP ── */}
+          {/* Stats */}
           <div style={{ display: 'grid', gridTemplateColumns: flaggedCount > 0 ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
             <StatCard label="Total Nota" value={filtered.length} accent={IOH.yellow} />
             <StatCard label="Total Nilai" value={`Rp ${formatAmount(totalAmount)}`} accent={IOH.red} />
@@ -907,7 +841,7 @@ export default function AdminPage() {
             {flaggedCount > 0 && <StatCard label="Perlu Dilengkapi" value={flaggedCount} accent={IOH.magenta} sub="Data tidak lengkap" />}
           </div>
 
-          {/* ── MISSING FIELD ALERT BANNER ── */}
+          {/* Alert banner */}
           {flaggedCount > 0 && (
             <div style={{ background: '#FFFBEB', border: '1.5px solid #FFD166', borderRadius: 14, padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
               <AlertTriangle size={16} color="#D97706" style={{ flexShrink: 0 }} />
@@ -918,7 +852,7 @@ export default function AdminPage() {
             </div>
           )}
 
-          {/* ── SUBMISSIONS ── */}
+          {/* Submissions */}
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: 16 }}>
               <div style={{ width: 38, height: 38, border: `3px solid ${IOH.yellow}`, borderTopColor: IOH.red, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -931,6 +865,7 @@ export default function AdminPage() {
               <div style={{ fontSize: 13, color: '#ddd', marginTop: 4 }}>Coba ubah filter atau rentang tanggal</div>
             </div>
           ) : viewMode === 'grid' ? (
+
             /* ── GRID VIEW ── */
             <div style={{ background: IOH.white, borderRadius: 18, padding: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}` }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#333', marginBottom: 16 }}>
@@ -939,17 +874,27 @@ export default function AdminPage() {
                 <span style={{ marginLeft: 8, fontSize: 11, color: '#bbb', fontWeight: 500 }}>· klik foto untuk review detail</span>
               </div>
               <GridView
-                submissions={filtered}
+                submissions={paginated}
                 onEdit={sub => setEditingSubmission(sub)}
                 onDelete={sub => setDeleteTarget(sub)}
-                onReviewOpen={i => setReviewerIndex(i)}
+                onReviewOpen={i => setReviewerIndex(pageStart + i)}
                 onPhotoReplaced={fetchSubmissions}
+                pageOffset={pageStart}
+              />
+              {/* ── FIX: Pagination selalu di-render di luar GridView, bukan di dalamnya ── */}
+              <Pagination
+                currentPage={safePage}
+                totalItems={filtered.length}
+                pageSize={pageSize}
+                onPageChange={p => { setCurrentPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
               />
             </div>
+
           ) : (
+
             /* ── LIST VIEW ── */
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {filtered.map((sub, idx) => {
+              {paginated.map((sub, idx) => {
                 const catCfg    = CATEGORY_CONFIG[sub.category] || CATEGORY_CONFIG.lainnya
                 const CatIcon   = catCfg.Icon
                 const isSelected = selectedIds.has(sub.id)
@@ -974,9 +919,8 @@ export default function AdminPage() {
                       </div>
                     )}
 
-                    {/* Foto struk — click opens reviewer */}
                     {sub.image_url && (
-                      <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => { e.stopPropagation(); setReviewerIndex(idx) }}>
+                      <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => { e.stopPropagation(); setReviewerIndex(pageStart + idx) }}>
                         <img src={sub.image_url} alt="nota" style={{ width: 54, height: 68, objectFit: 'cover', borderRadius: 10, cursor: 'zoom-in', display: 'block', border: `1px solid ${IOH.border}` }} />
                         <div style={{ position: 'absolute', bottom: -4, right: -4 }}>
                           <PhotoReplaceBtn submissionId={sub.id} onReplaced={fetchSubmissions} />
@@ -984,7 +928,6 @@ export default function AdminPage() {
                       </div>
                     )}
 
-                    {/* Content */}
                     <div style={{ flex: 1, minWidth: 0 }} onClick={e => e.stopPropagation()}>
                       {missing.length > 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 7, marginBottom: 6, background: '#FFFBEB', border: '1px solid #FFD166', fontSize: 11, color: '#92400E', fontWeight: 600 }}>
@@ -1009,7 +952,6 @@ export default function AdminPage() {
                         ? <div style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 2 }}>Rp {formatAmount(sub.amount)}</div>
                         : <div style={{ fontSize: 13, color: '#FF8A8A', fontWeight: 600, marginBottom: 2 }}>⚠ Nominal belum diisi</div>
                       }
-                      {/* Description only for lainnya */}
                       {sub.category === 'lainnya' && sub.description && (
                         <div style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>{sub.description}</div>
                       )}
@@ -1026,24 +968,8 @@ export default function AdminPage() {
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                       {(sub.amount ?? 0) > HIGH_VALUE_THRESHOLD && (
-                        <div
-                          title={sub.proof_image_url ? 'Lihat bukti transfer' : 'Belum ada bukti transfer'}
-                          onClick={() => sub.proof_image_url && setLightbox(sub.proof_image_url)}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: 5,
-                            padding: '5px 10px', borderRadius: 8,
-                            border: `1.5px solid ${sub.proof_image_url ? IOH.teal + '60' : '#FFE082'}`,
-                            background: sub.proof_image_url ? IOH.teal + '10' : '#FFFBEB',
-                            fontSize: 11, fontWeight: 700,
-                            color: sub.proof_image_url ? IOH.teal : '#D97706',
-                            cursor: sub.proof_image_url ? 'pointer' : 'default',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
-                          {sub.proof_image_url
-                            ? <><CheckCircle2 size={11} /> Bukti ✓</>
-                            : <>⚠ Bukti</>
-                          }
+                        <div title={sub.proof_image_url ? 'Lihat bukti transfer' : 'Belum ada bukti transfer'} onClick={() => sub.proof_image_url && setLightbox(sub.proof_image_url)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: `1.5px solid ${sub.proof_image_url ? IOH.teal + '60' : '#FFE082'}`, background: sub.proof_image_url ? IOH.teal + '10' : '#FFFBEB', fontSize: 11, fontWeight: 700, color: sub.proof_image_url ? IOH.teal : '#D97706', cursor: sub.proof_image_url ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+                          {sub.proof_image_url ? <><CheckCircle2 size={11} /> Bukti ✓</> : <>⚠ Bukti</>}
                         </div>
                       )}
                       <ActionBtn icon={<Pencil size={13} />} label="Edit" color={IOH.charcoal} onClick={() => setEditingSubmission(sub)} />
@@ -1052,12 +978,22 @@ export default function AdminPage() {
                   </div>
                 )
               })}
+
+              {/* ── FIX: Pagination ── */}
+              <div style={{ marginTop: 4 }}>
+                <Pagination
+                  currentPage={safePage}
+                  totalItems={filtered.length}
+                  pageSize={pageSize}
+                  onPageChange={p => { setCurrentPage(p); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
+                />
+              </div>
             </div>
+
           )}
         </div>
       </div>
 
-      {/* ── BILL REVIEWER MODAL ── */}
       {reviewerIndex !== null && (
         <BillReviewerModal
           submissions={filtered}
@@ -1068,7 +1004,9 @@ export default function AdminPage() {
         />
       )}
 
-      {editingSubmission && <EditModal submission={editingSubmission} onClose={() => setEditingSubmission(null)} onSave={handleEdit} isAdmin={true} />}
+      {editingSubmission && (
+        <EditModal submission={editingSubmission} onClose={() => setEditingSubmission(null)} onSave={handleEdit} isAdmin={true} />
+      )}
 
       {deleteTarget && (
         <DeleteConfirmModal

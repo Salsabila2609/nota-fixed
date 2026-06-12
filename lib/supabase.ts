@@ -13,7 +13,8 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 export type User = {
   id: string
   name: string
-  email: string
+  username: string
+  email?: string
   role: 'driver' | 'admin'
 }
 

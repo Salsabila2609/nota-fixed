@@ -9,7 +9,7 @@ const secret = new TextEncoder().encode(
 export type SessionUser = {
   id: string
   name: string
-  email: string
+  username: string
   role: 'driver' | 'admin'
 }
 
