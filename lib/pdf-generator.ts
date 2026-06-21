@@ -19,7 +19,6 @@ const C = {
   bg:        rgb(245/255, 245/255, 247/255),
   white:     rgb(1, 1, 1),
   border:    rgb(232/255, 232/255, 234/255),
-  // derived
   hdrBg:     rgb( 22/255,  22/255,  24/255),
   labelBg:   rgb( 36/255,  36/255,  38/255),
   rowAlt:    rgb(250/255, 250/255, 251/255),
@@ -49,8 +48,6 @@ export type GeneratePDFParams = {
 }
 
 // ── Slot ───────────────────────────────────────────────────────────────────
-// Setiap nota = 1 slot 'nota'
-// Nota HV = 1 slot 'nota' + 1 slot 'proof' (bisa beda baris, no padding)
 type Slot =
   | { type: 'nota';  sub: Sub; num: number }
   | { type: 'proof'; sub: Sub; num: number }
@@ -66,6 +63,29 @@ function buildSlots(subs: Sub[]): Slot[] {
     n++
   }
   return slots
+}
+
+// ── PERUBAHAN #1 (PDF gen): Image embed cache ──────────────────────────────
+// pdf-lib embedJpg/embedPng membuat objek baru setiap kali dipanggil,
+// meski buffer-nya identik. Untuk nota HV yang punya slot 'nota' DAN 'proof',
+// gambar yang sama akan di-embed dua kali tanpa cache ini.
+// Cache ini menyimpan referensi embed per identity buffer → embed sekali, pakai berkali.
+type EmbedCache = Map<Uint8Array, Awaited<ReturnType<PDFDocument['embedJpg']>>>
+
+async function getOrEmbedImage(
+  pdfDoc: PDFDocument,
+  cache: EmbedCache,
+  data: Uint8Array,
+): Promise<Awaited<ReturnType<PDFDocument['embedJpg']>>> {
+  if (cache.has(data)) return cache.get(data)!
+  let emb
+  try {
+    emb = await pdfDoc.embedJpg(data)
+  } catch {
+    emb = await pdfDoc.embedPng(data)
+  }
+  cache.set(data, emb)
+  return emb
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -122,27 +142,18 @@ function drawHeader(page: PDFPage, opts: {
   const { bold, reg, driverName, dateRange, companyName, subtitle, pageNum, totalPages } = opts
   const y0 = A4_H - HDR_H
 
-  // Base bar
   page.drawRectangle({ x: 0, y: y0, width: A4_W, height: HDR_H, color: C.hdrBg })
-  // Teal left accent
   page.drawRectangle({ x: 0, y: y0, width: 4, height: HDR_H, color: C.teal })
 
-  // Title
   page.drawText('LAPORAN REIMBURSE NOTA', {
     x: MG, y: A4_H - 22, font: bold, size: 12, color: C.white,
   })
-
-  // Subtitle / company — dimmer
   page.drawText(subtitle || companyName, {
     x: MG, y: A4_H - 36, font: reg, size: 8, color: C.textLight,
   })
-
-  // Driver name — teal
   page.drawText(`Driver: ${driverName}`, {
     x: MG, y: A4_H - 50, font: bold, size: 8.5, color: C.teal,
   })
-
-  // Right side: periode + page
   page.drawText(`Periode: ${fmtDate(dateRange.from)} – ${fmtDate(dateRange.to)}`, {
     x: A4_W - MG - 190, y: A4_H - 36, font: reg, size: 7.5, color: C.textLight,
   })
@@ -168,9 +179,9 @@ function drawFooter(page: PDFPage, opts: { reg: PDFFont }) {
 }
 
 // ── Single cell ────────────────────────────────────────────────────────────
-const LABEL_H   = 30   // bottom label area
+const LABEL_H   = 30
 const IMG_PAD   = 6
-const BANNER_H  = 18   // top banner for proof label
+const BANNER_H  = 18
 
 async function drawCell(
   pdfDoc: PDFDocument,
@@ -179,16 +190,17 @@ async function drawCell(
   cx: number, cy: number,
   cw: number, ch: number,
   bold: PDFFont, reg: PDFFont,
+  // PERUBAHAN #2 (PDF gen): Terima embed cache dari luar
+  // Semua cell dalam satu PDF berbagi cache yang sama
+  embedCache: EmbedCache,
 ) {
   const isProof = slot.type === 'proof'
 
-  // ── Cell background + border ──────────────────────────────────────────
   page.drawRectangle({
     x: cx + 2, y: cy + 2, width: cw - 4, height: ch - 4,
     color: C.white, borderColor: C.border, borderWidth: 0.6,
   })
 
-  // ── Top banner (only for proof slots) ────────────────────────────────
   if (isProof) {
     page.drawRectangle({
       x: cx + 2, y: cy + ch - BANNER_H - 2, width: cw - 4, height: BANNER_H,
@@ -200,7 +212,6 @@ async function drawCell(
     })
   }
 
-  // ── Image area ────────────────────────────────────────────────────────
   const bannerOffset = isProof ? BANNER_H : 0
   const imgX = cx + IMG_PAD + 2
   const imgY = cy + LABEL_H + IMG_PAD
@@ -211,9 +222,8 @@ async function drawCell(
 
   if (rawData) {
     try {
-      let emb
-      try { emb = await pdfDoc.embedJpg(rawData) }
-      catch { emb = await pdfDoc.embedPng(rawData) }
+      // PERUBAHAN #2 (PDF gen): Pakai cache — embed sekali, gambar sama tidak di-proses ulang
+      const emb = await getOrEmbedImage(pdfDoc, embedCache, rawData)
       const d = emb.scaleToFit(imgW, imgH)
       page.drawImage(emb, {
         x: imgX + (imgW - d.width) / 2,
@@ -230,14 +240,12 @@ async function drawCell(
     drawNoImage(page, imgX, imgY, imgW, imgH, reg, msg)
   }
 
-  // ── Bottom label ──────────────────────────────────────────────────────
   page.drawRectangle({
     x: cx + 2, y: cy + 2, width: cw - 4, height: LABEL_H,
     color: C.labelBg,
   })
 
   if (isProof) {
-    // Proof: just amount
     const amtStr = slot.sub.amount ? `Rp ${fmtAmt(slot.sub.amount)}` : '–'
     page.drawText(amtStr, {
       x: cx + 8, y: cy + 11, font: bold, size: 8, color: C.yellow,
@@ -246,11 +254,9 @@ async function drawCell(
       x: cx + 8, y: cy + 22, font: reg, size: 6.5, color: C.textMid,
     })
   } else {
-    // Nota: number badge + category + date + amount
     const dateStr = fmtDate(getPrimaryDate(slot.sub))
     const catStr  = getCategoryLabel(slot.sub.category, slot.sub.description)
 
-    // Number badge — small pill top-left in label area
     page.drawRectangle({
       x: cx + 4, y: cy + ch - (isProof ? BANNER_H + 2 : 0) - 20,
       width: 18, height: 14,
@@ -299,9 +305,11 @@ async function drawNotaPages(
     companyName: string; subtitle: string
     submissions: Sub[]
     startPageNum: number; totalPages: number
+    // PERUBAHAN #3 (PDF gen): Cache di-pass dari luar agar lintas halaman
+    embedCache: EmbedCache
   }
 ) {
-  const { bold, reg, driverName, dateRange, companyName, subtitle, submissions, startPageNum, totalPages } = opts
+  const { bold, reg, driverName, dateRange, companyName, subtitle, submissions, startPageNum, totalPages, embedCache } = opts
   const slots     = buildSlots(submissions)
   const numPages  = Math.ceil(slots.length / SLOTS_PER_PAGE) || 1
 
@@ -324,7 +332,7 @@ async function drawNotaPages(
       const row = Math.floor(i / COLS)
       const cx  = MG + col * cw
       const cy  = A4_H - MG - HDR_H - (row + 1) * ch
-      await drawCell(pdfDoc, page, pageSlots[i], cx, cy, cw, ch, bold, reg)
+      await drawCell(pdfDoc, page, pageSlots[i], cx, cy, cw, ch, bold, reg, embedCache)
     }
 
     drawFooter(page, { reg })
@@ -354,7 +362,6 @@ function drawSummaryPage(
   const isMulti = !!drivers && drivers.length > 1
   const page    = pdfDoc.addPage([A4_W, A4_H])
 
-  // ── Header ──
   page.drawRectangle({ x: 0, y: A4_H - HDR_H, width: A4_W, height: HDR_H, color: C.hdrBg })
   page.drawRectangle({ x: 0, y: A4_H - HDR_H, width: 4, height: HDR_H, color: C.teal })
   page.drawText('RINGKASAN REIMBURSE', {
@@ -370,11 +377,10 @@ function drawSummaryPage(
     x: MG, y: A4_H - 50, font: reg, size: 8, color: C.textMid,
   })
 
-  const TW = A4_W - MG * 2   // table width
-  const TX = MG               // table x
+  const TW = A4_W - MG * 2
+  const TX = MG
   let y    = A4_H - HDR_H - 24
 
-  // ── Column header row helper ──
   function drawTableHeader(yy: number) {
     page.drawRectangle({ x: TX, y: yy - 16, width: TW, height: 22, color: C.labelBg })
     page.drawRectangle({ x: TX, y: yy - 16, width: 3, height: 22, color: C.teal })
@@ -390,7 +396,6 @@ function drawSummaryPage(
     for (const drv of drivers!) {
       if (!drv.submissions.length) continue
 
-      // Driver label
       page.drawRectangle({ x: TX, y: y - 14, width: TW, height: 20, color: rgb(0.12, 0.12, 0.14) })
       page.drawRectangle({ x: TX, y: y - 14, width: 3, height: 20, color: C.teal })
       page.drawText(drv.name.toUpperCase(), {
@@ -415,7 +420,6 @@ function drawSummaryPage(
         drvTotal += data.total; ri++; y -= 18
       }
 
-      // Subtotal row
       page.drawRectangle({ x: TX, y: y - 13, width: TW, height: 18, color: rgb(0.10, 0.10, 0.12) })
       page.drawText(`Subtotal ${drv.name}`, { x: TX + 10, y: y - 5, font: bold, size: 8, color: C.white })
       page.drawText(`${drv.submissions.length} nota`, { x: TX + 290, y: y - 5, font: bold, size: 8, color: C.teal })
@@ -426,7 +430,6 @@ function drawSummaryPage(
       y -= 26
     }
 
-    // Grand total
     page.drawRectangle({ x: TX, y: y - 16, width: TW, height: 24, color: C.hdrBg })
     page.drawRectangle({ x: TX, y: y - 16, width: 4, height: 24, color: C.teal })
     page.drawText('TOTAL KESELURUHAN', { x: TX + 12, y: y - 6, font: bold, size: 9.5, color: C.white })
@@ -455,16 +458,14 @@ function drawSummaryPage(
       ri++; y -= 20
     }
 
-    // Total row
     page.drawRectangle({ x: TX, y: y - 16, width: TW, height: 24, color: C.hdrBg })
-    page.drawRectangle({ x: TX, y: y - 16, width: 4, height: C.teal ? 24 : 24, color: C.teal })
+    page.drawRectangle({ x: TX, y: y - 16, width: 4, height: 24, color: C.teal })
     page.drawText('TOTAL KESELURUHAN', { x: TX + 12, y: y - 6, font: bold, size: 9.5, color: C.white })
     page.drawText(`${subs.length} nota`, { x: TX + 288, y: y - 6, font: bold, size: 9, color: C.teal })
     page.drawText(`Rp ${fmtAmt(grandTotal)}`, { x: TX + 370, y: y - 6, font: bold, size: 10, color: C.yellow })
     y -= 42
   }
 
-  // ── Keterangan singkat ──
   page.drawRectangle({
     x: TX, y: y - 12, width: TW, height: 18,
     color: C.bg, borderColor: C.border, borderWidth: 0.4,
@@ -480,10 +481,8 @@ function drawSummaryPage(
   })
   y -= 50
 
-  // ── Tanda tangan ──
   const SIG_W = 160
 
-  // Kolom kiri
   page.drawText('Dibuat oleh,', { x: TX, y, font: reg, size: 8.5, color: C.textMid })
   page.drawLine({
     start: { x: TX, y: y - 46 }, end: { x: TX + SIG_W, y: y - 46 },
@@ -492,7 +491,6 @@ function drawSummaryPage(
   page.drawText(createdByTitle || 'Driver', { x: TX, y: y - 58, font: reg, size: 8, color: C.textMid })
   page.drawText(createdBy || driverName || '', { x: TX, y: y - 70, font: bold, size: 8.5, color: C.charcoal })
 
-  // Kolom kanan
   const sigR = TX + TW - SIG_W
   page.drawText('Disetujui oleh,', { x: sigR, y, font: reg, size: 8.5, color: C.textMid })
   page.drawLine({
@@ -517,12 +515,17 @@ export async function generateReimbursementPDF(params: GeneratePDFParams): Promi
   const bold   = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
   const reg    = await pdfDoc.embedFont(StandardFonts.Helvetica)
 
+  // PERUBAHAN #2 + #3 (PDF gen): Satu embed cache untuk seluruh PDF.
+  // Gambar yang sama (misal nota yang muncul di slot 'nota' dan 'proof')
+  // hanya di-embed satu kali ke dalam dokumen PDF, bukan dua kali.
+  // Ini menghemat memori dan waktu embed, terutama untuk nota HV (> 250rb).
+  const embedCache: EmbedCache = new Map()
+
   const isMulti = !!params.drivers && params.drivers.length > 1
 
   if (isMulti) {
     const drivers = params.drivers!.map(d => ({ ...d, submissions: sortByDate(d.submissions) }))
 
-    // Hitung total pages: semua nota pages + 1 summary
     const totalNotaPages = drivers.reduce((sum, d) => {
       return sum + (Math.ceil(buildSlots(d.submissions).length / SLOTS_PER_PAGE) || 1)
     }, 0)
@@ -536,6 +539,7 @@ export async function generateReimbursementPDF(params: GeneratePDFParams): Promi
         driverName: drv.name, dateRange, companyName, subtitle,
         submissions: drv.submissions,
         startPageNum: cur, totalPages,
+        embedCache,
       })
       cur += added
     }
@@ -560,6 +564,7 @@ export async function generateReimbursementPDF(params: GeneratePDFParams): Promi
       driverName: name, dateRange, companyName, subtitle,
       submissions: subs,
       startPageNum: 1, totalPages,
+      embedCache,
     })
 
     drawSummaryPage(pdfDoc, {
@@ -568,6 +573,9 @@ export async function generateReimbursementPDF(params: GeneratePDFParams): Promi
       driverName: name, submissions: subs,
     })
   }
+
+  // Setelah selesai, bersihkan cache — tidak perlu lagi
+  embedCache.clear()
 
   return pdfDoc.save()
 }

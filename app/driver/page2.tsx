@@ -49,37 +49,6 @@ const CATEGORY_CONFIG: Record<string, { label: string; Icon: any; color: string;
 
 const HIGH_VALUE_THRESHOLD = 250000
 
-// ── Utility ────────────────────────────────────────────────────────────────
-function compressImage(file: File, maxWidth = 1200, quality = 0.7): Promise<File> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      URL.revokeObjectURL(url)
-      const canvas = document.createElement('canvas')
-      let { width, height } = img
-      if (width > maxWidth) {
-        height = Math.round((height * maxWidth) / width)
-        width = maxWidth
-      }
-      canvas.width = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(img, 0, 0, width, height)
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) { resolve(file); return }
-          resolve(new File([blob], file.name, { type: 'image/jpeg' }))
-        },
-        'image/jpeg',
-        quality
-      )
-    }
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
-    img.src = url
-  })
-}
-
 // ── Delete Confirm Modal ───────────────────────────────────────────────────
 function DeleteConfirmModal({ name, onConfirm, onCancel }: {
   name: string; onConfirm: () => void; onCancel: () => void
@@ -267,16 +236,18 @@ function HighValueModal({ items, onDone }: {
     if (!item.proofFile) return
     setSaving(true)
     try {
-      const compressed = await compressImage(item.proofFile) 
       const fd = new FormData()
-      fd.append('file', compressed) 
+      fd.append('file', item.proofFile)
       const res = await fetch(
         `/api/submissions/${item.submissionId}/upload-proof`,
         { method: 'POST', body: fd }
       )
       if (!res.ok) throw new Error('Upload gagal')
       setSavedFlash(true)
-      setTimeout(() => { setSavedFlash(false); goNext() }, 900)
+      setTimeout(() => {
+        setSavedFlash(false)
+        goNext()
+      }, 900)
     } catch (err) {
       console.error(err)
     } finally {
@@ -632,9 +603,7 @@ export default function DriverPage() {
     try {
       const fd = new FormData()
       fd.append('submission_date', today)
-
-      const compressed = await Promise.all(files.map(item => compressImage(item.file)))
-      compressed.forEach((file, i) => fd.append(`image_${i}`, file))
+      files.forEach((item, i) => fd.append(`image_${i}`, item.file))
 
       const res = await fetch('/api/submissions', { method: 'POST', body: fd })
       const data = await res.json()

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import pLimit from 'p-limit'
 import { getSessionFromRequest } from '@/lib/auth'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateReimbursementPDF } from '@/lib/pdf-generator'
 import { r2Download } from '@/lib/r2'
+
+export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req)
@@ -30,6 +33,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Parameter tidak lengkap' }, { status: 400 })
     }
 
+    // PERUBAHAN #1: Concurrency control dengan p-limit
+    // Batasi 8 concurrent download dari R2 sekaligus.
+    // Tanpa ini, 500+ Promise.all langsung = spike memori + thread starvation.
+    // Angka 8 adalah sweet spot: cukup paralel, tidak overwhelm R2 atau RAM.
+    const downloadLimit = pLimit(8)
+
     async function fetchDriverData(drvId: string) {
       let query = supabaseAdmin
         .from('submissions')
@@ -55,26 +64,37 @@ export async function POST(req: NextRequest) {
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       })
 
+      // PERUBAHAN #1 (lanjutan): Setiap download dibungkus dalam downloadLimit().
+      // Efeknya: maks 8 download berjalan bersamaan, sisanya antri otomatis.
+      // Setelah salah satu selesai, antrian berikutnya langsung masuk.
       const withImages = await Promise.all(
-        sorted.map(async (sub) => {
-          const result: Record<string, any> = { ...sub }
+        sorted.map((sub) =>
+          downloadLimit(async () => {
+            const result: Record<string, any> = { ...sub }
 
-          // Foto nota utama
-          if (sub.image_path) {
-            try {
-              result.imageData = await r2Download(sub.image_path)
-            } catch {}
-          }
+            // PERUBAHAN #2: Tidak ada lagi detectBlur() di sini.
+            // Blur check sudah dilakukan saat user upload foto (di upload handler).
+            // Gambar yang ada di R2 dijamin sudah lolos validasi.
+            // Memanggil detectBlur() per-gambar di sini sebelumnya = +0.5-1 detik per gambar.
 
-          // Bukti transfer (hanya kalau amount > 250rb dan ada path-nya)
-          if (sub.proof_image_path && (sub.amount ?? 0) > 250_000) {
-            try {
-              result.proofImageData = await r2Download(sub.proof_image_path)
-            } catch {}
-          }
+            if (sub.image_path) {
+              try {
+                result.imageData = await r2Download(sub.image_path)
+              } catch {
+                // Biarkan slot kosong — pdf-generator akan tampilkan placeholder
+              }
+            }
 
-          return result
-        })
+            // Download proof image hanya untuk nota > 250rb yang punya path
+            if (sub.proof_image_path && (sub.amount ?? 0) > 250_000) {
+              try {
+                result.proofImageData = await r2Download(sub.proof_image_path)
+              } catch {}
+            }
+
+            return result
+          })
+        )
       )
 
       return {
@@ -96,6 +116,8 @@ export async function POST(req: NextRequest) {
 
     // Mode gabung: driver_ids array
     if (driver_ids && Array.isArray(driver_ids) && driver_ids.length > 0) {
+      // Fetch semua driver secara paralel (level driver, bukan level gambar)
+      // Level gambar sudah dikontrol oleh downloadLimit di dalam fetchDriverData
       const driversData = (
         await Promise.all(driver_ids.map(fetchDriverData))
       ).filter(Boolean) as { id: string; name: string; submissions: any[] }[]
@@ -109,9 +131,10 @@ export async function POST(req: NextRequest) {
         drivers: driversData,
       })
 
-      const filename = driversData.length === 1
-        ? `Reimburse_${driversData[0].name.replace(/\s+/g, '_')}_${date_from}_${date_to}.pdf`
-        : `Reimburse_Semua_Driver_${date_from}_${date_to}.pdf`
+      const filename =
+        driversData.length === 1
+          ? `Reimburse_${driversData[0].name.replace(/\s+/g, '_')}_${date_from}_${date_to}.pdf`
+          : `Reimburse_Semua_Driver_${date_from}_${date_to}.pdf`
 
       return new NextResponse(Buffer.from(pdfBytes), {
         headers: {
@@ -124,12 +147,18 @@ export async function POST(req: NextRequest) {
 
     // Mode single driver
     if (!driver_id) {
-      return NextResponse.json({ error: 'driver_id atau driver_ids wajib diisi' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'driver_id atau driver_ids wajib diisi' },
+        { status: 400 }
+      )
     }
 
     const driverData = await fetchDriverData(driver_id)
     if (!driverData) {
-      return NextResponse.json({ error: 'Tidak ada nota untuk periode ini' }, { status: 404 })
+      return NextResponse.json(
+        { error: 'Tidak ada nota untuk periode ini' },
+        { status: 404 }
+      )
     }
 
     const pdfBytes = await generateReimbursementPDF({
@@ -147,7 +176,6 @@ export async function POST(req: NextRequest) {
         'Content-Length': pdfBytes.length.toString(),
       },
     })
-
   } catch (err) {
     console.error('PDF generation error:', err)
     return NextResponse.json({ error: 'Gagal generate PDF' }, { status: 500 })

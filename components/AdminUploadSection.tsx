@@ -1,3 +1,4 @@
+
 'use client'
 import { useState, useRef } from 'react'
 import {
@@ -36,6 +37,37 @@ type HighValueItem = {
   proofFile?: File
   proofPreview?: string
   confirmed: boolean
+}
+
+// tambah ini di atas function ModalShell
+function compressImage(file: File, maxWidth = 1200, quality = 0.7): Promise<File> {
+  return new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const canvas = document.createElement('canvas')
+      let { width, height } = img
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width)
+        width = maxWidth
+      }
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(file); return }
+          resolve(new File([blob], file.name, { type: 'image/jpeg' }))
+        },
+        'image/jpeg',
+        quality
+      )
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
+    img.src = url
+  })
 }
 
 // ── Shared Modal Shell (sama persis dengan driver page) ───────────────────
@@ -135,8 +167,9 @@ function HighValueModal({ items, onDone }: { items: HighValueItem[]; onDone: (re
     if (!item.proofFile) return
     setSaving(true)
     try {
+      const compressed = await compressImage(item.proofFile)  
       const fd = new FormData()
-      fd.append('file', item.proofFile)
+      fd.append('file', compressed)  
       await fetch(`/api/submissions/${item.submissionId}/upload-proof`, { method: 'POST', body: fd })
       setSavedFlash(true)
       setTimeout(() => { setSavedFlash(false); goNext() }, 900)
@@ -377,7 +410,8 @@ export default function AdminUploadSection({
     fd.append('submission_date', today)
     // Kirim driver_id agar API tahu upload ini atas nama siapa
     fd.append('driver_id', selectedDriverId)
-    files.forEach((item, i) => fd.append(`image_${i}`, item.file))
+    const compressed = await Promise.all(files.map(item => compressImage(item.file)))  
+    compressed.forEach((file, i) => fd.append(`image_${i}`, file))  
     try {
       const res = await fetch('/api/submissions', { method: 'POST', body: fd })
       const data = await res.json()

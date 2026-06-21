@@ -9,7 +9,8 @@ import {
   Trash2, Pencil, Download, LogOut, ChevronDown,
   ReceiptText, Car, Fuel, ParkingCircle, AlertTriangle, X,
   SlidersHorizontal, Search, Eye, EyeOff, LayoutGrid, List,
-  Camera, ChevronLeft, ChevronRight, CheckCircle2, ImagePlus
+  Camera, ChevronLeft, ChevronRight, CheckCircle2, ImagePlus,
+  Filter
 } from 'lucide-react'
 
 // ── IOH Brand Palette ──────────────────────────────────────────────────────
@@ -27,7 +28,6 @@ const IOH = {
 
 const HIGH_VALUE_THRESHOLD = 250000
 
-// ── Page sizes — adjust these to test pagination ───────────────────────────
 const PAGE_SIZE_LIST = 10
 const PAGE_SIZE_GRID = 24
 
@@ -56,28 +56,40 @@ function getMissingFields(sub: Submission): string[] {
   return missing
 }
 
+// ── Hook: detect mobile ────────────────────────────────────────────────────
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+  return isMobile
+}
+
 // ── Delete Confirm Modal ───────────────────────────────────────────────────
 function DeleteConfirmModal({ name, onConfirm, onCancel }: {
   name: string; onConfirm: () => void; onCancel: () => void
 }) {
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 24 }}>
-      <div style={{ background: IOH.white, borderRadius: 20, padding: 32, maxWidth: 400, width: '100%', boxShadow: '0 32px 64px rgba(0,0,0,0.18)', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 14, background: '#FFF0F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <AlertTriangle size={22} color={IOH.red} />
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+      <div style={{ background: IOH.white, borderRadius: 20, padding: '24px 20px', maxWidth: 380, width: '100%', boxShadow: '0 32px 64px rgba(0,0,0,0.18)', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#FFF0F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <AlertTriangle size={20} color={IOH.red} />
           </div>
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16, color: '#111' }}>Hapus Nota?</div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: '#111' }}>Hapus Nota?</div>
             <div style={{ fontSize: 12, color: '#999', marginTop: 2 }}>Tindakan ini tidak bisa dibatalkan</div>
           </div>
         </div>
-        <p style={{ fontSize: 13, color: IOH.charcoal, lineHeight: 1.7, marginBottom: 24 }}>
+        <p style={{ fontSize: 13, color: IOH.charcoal, lineHeight: 1.7, marginBottom: 20 }}>
           Nota <strong style={{ color: '#111' }}>{name}</strong> akan dihapus permanen dari sistem termasuk foto struk-nya.
         </p>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onCancel} style={{ flex: 1, padding: '11px 0', borderRadius: 12, border: `1.5px solid ${IOH.border}`, background: IOH.white, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, fontWeight: 600, cursor: 'pointer', color: IOH.charcoal }}>Batal</button>
-          <button onClick={onConfirm} style={{ flex: 1, padding: '11px 0', borderRadius: 12, border: 'none', background: IOH.red, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, fontWeight: 700, cursor: 'pointer', color: '#fff' }}>Ya, Hapus</button>
+          <button onClick={onCancel} style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: `1.5px solid ${IOH.border}`, background: IOH.white, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, fontWeight: 600, cursor: 'pointer', color: IOH.charcoal }}>Batal</button>
+          <button onClick={onConfirm} style={{ flex: 1, padding: '12px 0', borderRadius: 12, border: 'none', background: IOH.red, fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 13, fontWeight: 700, cursor: 'pointer', color: '#fff' }}>Ya, Hapus</button>
         </div>
       </div>
     </div>
@@ -87,33 +99,34 @@ function DeleteConfirmModal({ name, onConfirm, onCancel }: {
 // ── Stat Card ──────────────────────────────────────────────────────────────
 function StatCard({ label, value, accent, sub }: { label: string; value: any; accent: string; sub?: string }) {
   return (
-    <div style={{ background: IOH.white, borderRadius: 16, padding: '18px 22px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}`, position: 'relative', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', top: -16, right: -16, width: 72, height: 72, borderRadius: '50%', background: accent + '12' }} />
-      <div style={{ fontSize: 22, fontWeight: 800, color: accent, lineHeight: 1.1, marginBottom: 4 }}>{value}</div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
-      {sub && <div style={{ fontSize: 11, color: '#bbb', marginTop: 2 }}>{sub}</div>}
+    <div style={{ background: IOH.white, borderRadius: 14, padding: '14px 16px', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}`, position: 'relative', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', top: -14, right: -14, width: 60, height: 60, borderRadius: '50%', background: accent + '12' }} />
+      <div style={{ fontSize: 18, fontWeight: 800, color: accent, lineHeight: 1.1, marginBottom: 3 }}>{value}</div>
+      <div style={{ fontSize: 10, fontWeight: 700, color: '#aaa', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</div>
+      {sub && <div style={{ fontSize: 10, color: '#bbb', marginTop: 2 }}>{sub}</div>}
     </div>
   )
 }
 
 // ── Action Button ──────────────────────────────────────────────────────────
-function ActionBtn({ icon, label, color, onClick, danger }: { icon: any; label: string; color: string; onClick: () => void; danger?: boolean }) {
+function ActionBtn({ icon, label, color, onClick, danger, compact }: { icon: any; label: string; color: string; onClick: () => void; danger?: boolean; compact?: boolean }) {
   const [hov, setHov] = useState(false)
   return (
     <button onClick={onClick} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)} style={{
-      display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px',
+      display: 'flex', alignItems: 'center', gap: compact ? 0 : 5,
+      padding: compact ? '7px' : '6px 11px',
       borderRadius: 9, border: `1.5px solid ${hov ? color : IOH.border}`,
       background: hov && danger ? IOH.red : hov ? '#F8F8FA' : IOH.white,
       cursor: 'pointer', fontSize: 12, fontWeight: 600, color: hov && danger ? '#fff' : color,
       fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s', whiteSpace: 'nowrap'
     }}>
-      {icon} {label}
+      {icon} {!compact && label}
     </button>
   )
 }
 
 const inputStyle: React.CSSProperties = {
-  width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid #E8E8EA`,
+  width: '100%', padding: '10px 12px', borderRadius: 10, border: `1.5px solid #E8E8EA`,
   fontSize: 13, color: '#222', background: '#fff', outline: 'none',
   fontFamily: "'Plus Jakarta Sans', sans-serif", appearance: 'none',
   transition: 'border-color 0.15s'
@@ -165,7 +178,7 @@ function PhotoReplaceBtn({ submissionId, onReplaced }: { submissionId: string; o
 
 // ── Bill Reviewer Modal ────────────────────────────────────────────────────
 const inlineInputStyle: React.CSSProperties = {
-  width: '100%', padding: '8px 11px', borderRadius: 10,
+  width: '100%', padding: '9px 11px', borderRadius: 10,
   border: `1.5px solid ${IOH.border}`,
   background: IOH.white, color: '#111',
   fontSize: 13, fontWeight: 600, outline: 'none',
@@ -184,10 +197,12 @@ function BillReviewerModal({
   onSave: (id: string, updates: any) => Promise<void>
   onPhotoReplaced: () => void
 }) {
+  const isMobile = useIsMobile()
   const [idx, setIdx] = useState(startIndex)
   const [thumbPage, setThumbPage] = useState(Math.floor(startIndex / THUMB_PAGE_SIZE))
   const [showOcr, setShowOcr] = useState(false)
   const [showProof, setShowProof] = useState(false)
+  const [mobileTab, setMobileTab] = useState<'photo' | 'data'>('photo')
   const [photoUploading, setPhotoUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
@@ -291,22 +306,216 @@ function BillReviewerModal({
   const thumbEnd   = Math.min(thumbStart + THUMB_PAGE_SIZE, submissions.length)
   const thumbSlice = submissions.slice(thumbStart, thumbEnd)
 
+  // ── Photo Panel Content (shared between mobile/desktop) ────────────────
+  const PhotoPanel = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: isMobile ? '12px 16px' : '16px 28px' }}>
+      <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', background: IOH.white, border: `1px solid ${IOH.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: isMobile ? 260 : 'calc(100vh - 300px)', width: '100%' }}>
+        {displayImageUrl
+          ? <img src={displayImageUrl} alt="nota" style={{ maxWidth: '100%', maxHeight: isMobile ? 260 : 'calc(100vh - 320px)', objectFit: 'contain', display: 'block' }} />
+          : <div style={{ width: 200, height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <ReceiptText size={36} color="#ddd" />
+              <span style={{ fontSize: 12, color: '#ccc' }}>Tidak ada foto</span>
+            </div>
+        }
+      </div>
+
+      <div>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoReplace} />
+        <button onClick={() => fileRef.current?.click()} disabled={photoUploading} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: `1.5px solid ${IOH.teal}66`, background: IOH.teal + '12', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: IOH.teal, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+          {photoUploading
+            ? <><div style={{ width: 12, height: 12, border: `2px solid ${IOH.teal}44`, borderTopColor: IOH.teal, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Mengunggah...</>
+            : <><Camera size={13} /> Ganti Foto</>
+          }
+        </button>
+      </div>
+
+      {/* Thumbnail strip */}
+      <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: 4 }}>
+          {thumbSlice.map((s, relI) => {
+            const absI = thumbStart + relI
+            const isCurrent = absI === idx
+            const hasMissing = getMissingFields(s).length > 0
+            const thumbUrl = absI === idx ? (localImageUrl ?? s.image_url) : s.image_url
+            return (
+              <div key={s.id} onClick={() => setIdx(absI)} style={{ flexShrink: 0, width: 38, height: 50, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', border: isCurrent ? `2.5px solid ${IOH.red}` : hasMissing ? `1.5px solid #FFD166` : `1.5px solid ${IOH.border}`, opacity: isCurrent ? 1 : 0.65, transition: 'all 0.15s', position: 'relative', background: '#f3f3f4' }}>
+                {thumbUrl
+                  ? <img src={thumbUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                  : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ReceiptText size={13} color="#ccc" /></div>
+                }
+                {hasMissing && !isCurrent && (
+                  <div style={{ position: 'absolute', top: 2, right: 2, width: 9, height: 9, borderRadius: '50%', background: '#FFD166', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <AlertTriangle size={5} color="#92400E" />
+                  </div>
+                )}
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.55)', textAlign: 'center', fontSize: 8, color: '#fff', padding: '1px 0', fontWeight: 700 }}>{absI + 1}</div>
+              </div>
+            )
+          })}
+        </div>
+
+        {totalThumbPages > 1 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            <button onClick={() => setThumbPage(p => Math.max(0, p - 1))} disabled={thumbPage === 0} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: thumbPage === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === 0 ? 0.3 : 1 }}>
+              <ChevronLeft size={12} color={IOH.charcoal} />
+            </button>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {Array.from({ length: totalThumbPages }).map((_, pi) => (
+                <div key={pi} onClick={() => setThumbPage(pi)} style={{ width: pi === thumbPage ? 18 : 6, height: 6, borderRadius: 3, background: pi === thumbPage ? IOH.red : IOH.border, cursor: 'pointer', transition: 'all 0.2s' }} />
+              ))}
+            </div>
+            <button onClick={() => setThumbPage(p => Math.min(totalThumbPages - 1, p + 1))} disabled={thumbPage === totalThumbPages - 1} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: thumbPage === totalThumbPages - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === totalThumbPages - 1 ? 0.3 : 1 }}>
+              <ChevronRight size={12} color={IOH.charcoal} />
+            </button>
+            <span style={{ fontSize: 10, color: '#bbb', fontWeight: 600 }}>{thumbStart + 1}–{thumbEnd}/{submissions.length}</span>
+          </div>
+        )}
+      </div>
+
+      {!isMobile && <div style={{ fontSize: 11, color: '#ccc', textAlign: 'center' }}>← → navigasi · Esc tutup</div>}
+    </div>
+  )
+
+  // ── Data Panel Content (shared between mobile/desktop) ─────────────────
+  const DataPanel = () => (
+    <div style={{ overflowY: 'auto', padding: isMobile ? '16px 16px 80px' : '20px 24px 80px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+      <div style={{ background: IOH.white, borderRadius: 16, border: `1px solid ${IOH.border}`, overflow: 'visible', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
+        <div style={{ padding: isMobile ? '14px 14px 4px' : '16px 18px 4px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>Data Nota #{idx + 1}</div>
+
+          <div style={{ marginBottom: 13 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Nama Driver</label>
+            <div style={{ fontSize: 13, fontWeight: 700, color: IOH.charcoal, padding: '6px 0' }}>{sub.driver_name}</div>
+          </div>
+
+          <div style={{ marginBottom: 13 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Kategori</label>
+            <select value={draft.category} onChange={e => setDraft(d => ({ ...d, category: e.target.value }))} style={{ ...inlineInputStyle, appearance: 'none', fontSize: 14, padding: '10px 12px' }}>
+              <option value="">— Pilih kategori —</option>
+              {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
+                <option key={key} value={key}>{cfg.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 13 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Nominal (Rp)</label>
+            <input type="number" min={0} inputMode="numeric" value={draft.amount} onChange={e => setDraft(d => ({ ...d, amount: e.target.value }))} placeholder="0" style={{ ...inlineInputStyle, fontSize: 14, padding: '10px 12px' }} />
+          </div>
+
+          <div style={{ marginBottom: 13 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Tanggal Struk</label>
+            <input type="date" value={draft.bill_date} onChange={e => setDraft(d => ({ ...d, bill_date: e.target.value }))} style={{ ...inlineInputStyle, fontSize: 14, padding: '10px 12px' }} />
+          </div>
+
+          <div style={{ marginBottom: 13 }}>
+            <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Tanggal Submit</label>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#bbb', padding: '6px 0' }}>
+              {new Date(sub.submission_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
+            </div>
+          </div>
+
+          {draft.category === 'lainnya' && (
+            <div style={{ marginBottom: 6 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Keterangan</label>
+              <textarea value={draft.description} onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} placeholder="Opsional" rows={2} style={{ ...inlineInputStyle, resize: 'vertical', lineHeight: 1.5, fontSize: 14 }} />
+            </div>
+          )}
+        </div>
+
+        {/* OCR */}
+        <div style={{ borderTop: `1px solid ${IOH.border}` }}>
+          <button onClick={() => setShowOcr(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              {showOcr ? <EyeOff size={13} color={IOH.teal} /> : <Eye size={13} color={IOH.teal} />}
+              <span style={{ fontSize: 12, fontWeight: 700, color: IOH.teal }}>Teks OCR dari Struk</span>
+              {sub.ocr_raw_text && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, background: IOH.teal + '18', color: IOH.teal, fontWeight: 700 }}>Ada</span>}
+            </div>
+            <ChevronDown size={14} color="#ccc" style={{ transform: showOcr ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+          </button>
+          {showOcr && (
+            <div style={{ padding: '0 16px 16px' }}>
+              {sub.ocr_raw_text
+                ? <div style={{ background: '#F8F8FA', borderRadius: 10, padding: '11px 13px', fontSize: 11, color: '#888', whiteSpace: 'pre-wrap', maxHeight: 160, overflowY: 'auto', lineHeight: 1.7, border: `1px solid ${IOH.border}`, fontFamily: 'monospace' }}>{sub.ocr_raw_text}</div>
+                : <div style={{ fontSize: 12, color: '#ccc', fontStyle: 'italic', textAlign: 'center', padding: '10px 0' }}>Tidak ada data OCR.</div>
+              }
+            </div>
+          )}
+        </div>
+
+        {/* Bukti Transfer */}
+        {(sub.amount ?? 0) > HIGH_VALUE_THRESHOLD && (
+          <div style={{ borderTop: `1px solid ${IOH.border}` }}>
+            <button onClick={() => setShowProof(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                {sub.proof_image_url ? <CheckCircle2 size={13} color={IOH.teal} /> : <AlertTriangle size={13} color="#D97706" />}
+                <span style={{ fontSize: 12, fontWeight: 700, color: sub.proof_image_url ? IOH.teal : '#D97706' }}>Bukti Transfer Bank</span>
+                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, fontWeight: 700, background: sub.proof_image_url ? IOH.teal + '18' : '#FFFBEB', color: sub.proof_image_url ? IOH.teal : '#D97706' }}>
+                  {sub.proof_image_url ? 'Ada' : 'Belum'}
+                </span>
+              </div>
+              <ChevronDown size={14} color="#ccc" style={{ transform: showProof ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+            </button>
+            {showProof && (
+              <div style={{ padding: '0 16px 16px' }}>
+                {sub.proof_image_url ? (
+                  <>
+                    <div onClick={() => setProofLightbox(sub.proof_image_url!)} style={{ borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${IOH.teal}55`, cursor: 'zoom-in', marginBottom: 8, background: '#f8f8f8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img src={sub.proof_image_url} alt="bukti transfer" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', display: 'block' }} />
+                    </div>
+                    <div style={{ fontSize: 11, color: '#bbb', textAlign: 'center' }}>Klik untuk perbesar</div>
+                  </>
+                ) : (
+                  <div style={{ padding: '10px 0', textAlign: 'center' }}>
+                    <div style={{ fontSize: 12, color: '#D97706', fontWeight: 600, marginBottom: 3 }}>Bukti transfer belum diupload driver</div>
+                    <div style={{ fontSize: 11, color: '#bbb' }}>Driver perlu upload via halaman mereka</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Save button */}
+        <div style={{ padding: '14px 16px', borderTop: `1px solid ${IOH.border}` }}>
+          <button onClick={handleSave} disabled={!isDirty || saving} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '13px 0', borderRadius: 12, border: 'none', cursor: isDirty && !saving ? 'pointer' : 'not-allowed', background: savedFlash ? IOH.teal : isDirty && !saving ? IOH.yellow : IOH.border, fontSize: 14, fontWeight: 800, color: savedFlash ? '#fff' : isDirty && !saving ? '#111' : '#bbb', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.2s' }}>
+            {saving
+              ? <><div style={{ width: 13, height: 13, border: '2px solid rgba(0,0,0,0.15)', borderTopColor: '#333', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Menyimpan...</>
+              : savedFlash
+              ? <><CheckCircle2 size={14} /> Tersimpan</>
+              : <><Pencil size={14} /> Simpan Perubahan</>
+            }
+          </button>
+          {!isDirty && !savedFlash && <div style={{ textAlign: 'center', fontSize: 11, color: '#ccc', marginTop: 6 }}>Tidak ada perubahan</div>}
+        </div>
+      </div>
+
+      {/* Dot nav */}
+      <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 6 }}>
+        {submissions.slice(Math.max(0, idx - 2), Math.min(submissions.length, idx + 3)).map((_, relI) => {
+          const absI = Math.max(0, idx - 2) + relI
+          return <div key={absI} onClick={() => setIdx(absI)} style={{ width: absI === idx ? 24 : 6, height: 6, borderRadius: 3, background: absI === idx ? IOH.red : IOH.border, cursor: 'pointer', transition: 'all 0.2s' }} />
+        })}
+      </div>
+    </div>
+  )
+
   return (
     <div
       style={{ position: 'fixed', inset: 0, background: 'rgba(77,77,79,0.45)', backdropFilter: 'blur(8px)', zIndex: 1100, display: 'flex', flexDirection: 'column', fontFamily: "'Plus Jakarta Sans', sans-serif" }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div style={{ position: 'absolute', inset: 20, background: IOH.bg, borderRadius: 24, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,0.22)' }}>
+      <div style={{ position: 'absolute', inset: isMobile ? 0 : 20, background: IOH.bg, borderRadius: isMobile ? 0 : 24, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,0.22)' }}>
 
         {/* Header */}
-        <div style={{ background: IOH.white, borderBottom: `1px solid ${IOH.border}`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 10px', borderRadius: 8, background: catCfg.bg, border: `1px solid ${catCfg.color}22` }}>
-              <catCfg.Icon size={12} color={catCfg.color} strokeWidth={2.5} />
+        <div style={{ background: IOH.white, borderBottom: `1px solid ${IOH.border}`, padding: isMobile ? '12px 14px' : '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 8, background: catCfg.bg, border: `1px solid ${catCfg.color}22`, flexShrink: 0 }}>
+              <catCfg.Icon size={11} color={catCfg.color} strokeWidth={2.5} />
               <span style={{ fontSize: 11, fontWeight: 700, color: catCfg.color }}>{catCfg.label}</span>
             </div>
-            <span style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{sub.driver_name}</span>
-            {missingInDraft.length > 0 && (
+            <span style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub.driver_name}</span>
+            {missingInDraft.length > 0 && !isMobile && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 7, background: '#FFFBEB', border: '1px solid #FFD166' }}>
                 <AlertTriangle size={11} color="#D97706" />
                 <span style={{ fontSize: 11, color: '#92400E', fontWeight: 700 }}>Kosong: {missingInDraft.join(', ')}</span>
@@ -319,215 +528,56 @@ function BillReviewerModal({
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 12, color: '#aaa', fontWeight: 600 }}>{idx + 1} / {submissions.length}</span>
-            <button onClick={prev} disabled={idx === 0} style={{ width: 32, height: 32, borderRadius: 9, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: idx === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: idx === 0 ? 0.3 : 1 }}>
-              <ChevronLeft size={16} color={IOH.charcoal} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: '#aaa', fontWeight: 600 }}>{idx + 1}/{submissions.length}</span>
+            <button onClick={prev} disabled={idx === 0} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: idx === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: idx === 0 ? 0.3 : 1 }}>
+              <ChevronLeft size={15} color={IOH.charcoal} />
             </button>
-            <button onClick={next} disabled={idx === submissions.length - 1} style={{ width: 32, height: 32, borderRadius: 9, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: idx === submissions.length - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: idx === submissions.length - 1 ? 0.3 : 1 }}>
-              <ChevronRight size={16} color={IOH.charcoal} />
+            <button onClick={next} disabled={idx === submissions.length - 1} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: idx === submissions.length - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: idx === submissions.length - 1 ? 0.3 : 1 }}>
+              <ChevronRight size={15} color={IOH.charcoal} />
             </button>
-            <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 9, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <X size={15} color={IOH.charcoal} />
+            <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={14} color={IOH.charcoal} />
             </button>
           </div>
         </div>
+
+        {/* Mobile warning strip */}
+        {isMobile && missingInDraft.length > 0 && (
+          <div style={{ padding: '7px 14px', background: '#FFFBEB', borderBottom: '1px solid #FFD166', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <AlertTriangle size={11} color="#D97706" />
+            <span style={{ fontSize: 11, color: '#92400E', fontWeight: 700 }}>Kosong: {missingInDraft.join(', ')}</span>
+          </div>
+        )}
+
+        {/* Mobile tab switcher */}
+        {isMobile && (
+          <div style={{ display: 'flex', borderBottom: `1px solid ${IOH.border}`, background: IOH.white, flexShrink: 0 }}>
+            {(['photo', 'data'] as const).map(tab => (
+              <button key={tab} onClick={() => setMobileTab(tab)} style={{ flex: 1, padding: '11px 0', border: 'none', borderBottom: mobileTab === tab ? `2.5px solid ${IOH.red}` : '2.5px solid transparent', background: 'none', fontSize: 12, fontWeight: 700, color: mobileTab === tab ? IOH.red : '#aaa', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}>
+                {tab === 'photo' ? '📷 Foto Struk' : '✏️ Data & Edit'}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Body */}
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-
-          {/* Photo panel */}
-          <div style={{ flex: '0 0 52%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '16px 28px', gap: 10, borderRight: `1px solid ${IOH.border}`, background: '#FAFAFA', overflowY: 'auto', minHeight: 0 }}>
-
-            <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', background: IOH.white, border: `1px solid ${IOH.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: 'calc(100vh - 300px)' }}>
-              {displayImageUrl
-                ? <img src={displayImageUrl} alt="nota" style={{ maxWidth: '100%', maxHeight: 'calc(100vh - 320px)', objectFit: 'contain', display: 'block' }} />
-                : <div style={{ width: 200, height: 260, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    <ReceiptText size={36} color="#ddd" />
-                    <span style={{ fontSize: 12, color: '#ccc' }}>Tidak ada foto</span>
-                  </div>
-              }
-            </div>
-
-            <div>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoReplace} />
-              <button onClick={() => fileRef.current?.click()} disabled={photoUploading} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 16px', borderRadius: 10, border: `1.5px solid ${IOH.teal}66`, background: IOH.teal + '12', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: IOH.teal, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                {photoUploading
-                  ? <><div style={{ width: 12, height: 12, border: `2px solid ${IOH.teal}44`, borderTopColor: IOH.teal, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Mengunggah...</>
-                  : <><Camera size={13} /> Ganti Foto</>
-                }
-              </button>
-            </div>
-
-            {/* Thumbnail strip */}
-            <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', gap: 5, justifyContent: 'center', flexWrap: 'nowrap' }}>
-                {thumbSlice.map((s, relI) => {
-                  const absI = thumbStart + relI
-                  const isCurrent = absI === idx
-                  const hasMissing = getMissingFields(s).length > 0
-                  const thumbUrl = absI === idx ? (localImageUrl ?? s.image_url) : s.image_url
-                  return (
-                    <div key={s.id} onClick={() => setIdx(absI)} style={{ flexShrink: 0, width: 40, height: 52, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', border: isCurrent ? `2.5px solid ${IOH.red}` : hasMissing ? `1.5px solid #FFD166` : `1.5px solid ${IOH.border}`, opacity: isCurrent ? 1 : 0.65, transition: 'all 0.15s', position: 'relative', background: '#f3f3f4' }}>
-                      {thumbUrl
-                        ? <img src={thumbUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-                        : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ReceiptText size={13} color="#ccc" /></div>
-                      }
-                      {hasMissing && !isCurrent && (
-                        <div style={{ position: 'absolute', top: 2, right: 2, width: 9, height: 9, borderRadius: '50%', background: '#FFD166', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <AlertTriangle size={5} color="#92400E" />
-                        </div>
-                      )}
-                      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.55)', textAlign: 'center', fontSize: 8, color: '#fff', padding: '1px 0', fontWeight: 700 }}>{absI + 1}</div>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {totalThumbPages > 1 && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  <button onClick={() => setThumbPage(p => Math.max(0, p - 1))} disabled={thumbPage === 0} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: thumbPage === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === 0 ? 0.3 : 1 }}>
-                    <ChevronLeft size={12} color={IOH.charcoal} />
-                  </button>
-                  <div style={{ display: 'flex', gap: 4 }}>
-                    {Array.from({ length: totalThumbPages }).map((_, pi) => (
-                      <div key={pi} onClick={() => setThumbPage(pi)} style={{ width: pi === thumbPage ? 18 : 6, height: 6, borderRadius: 3, background: pi === thumbPage ? IOH.red : IOH.border, cursor: 'pointer', transition: 'all 0.2s' }} />
-                    ))}
-                  </div>
-                  <button onClick={() => setThumbPage(p => Math.min(totalThumbPages - 1, p + 1))} disabled={thumbPage === totalThumbPages - 1} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: thumbPage === totalThumbPages - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === totalThumbPages - 1 ? 0.3 : 1 }}>
-                    <ChevronRight size={12} color={IOH.charcoal} />
-                  </button>
-                  <span style={{ fontSize: 10, color: '#bbb', fontWeight: 600 }}>{thumbStart + 1}–{thumbEnd} / {submissions.length}</span>
-                </div>
-              )}
-            </div>
-
-            <div style={{ fontSize: 11, color: '#ccc', textAlign: 'center' }}>← → navigasi · Esc tutup</div>
+        {isMobile ? (
+          /* ── MOBILE: tab-based layout ── */
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            {mobileTab === 'photo' ? <PhotoPanel /> : <DataPanel />}
           </div>
-
-          {/* Data / Edit panel */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 80px', display: 'flex', flexDirection: 'column', gap: 0, minHeight: 0 }}>
-            <div style={{ background: IOH.white, borderRadius: 16, border: `1px solid ${IOH.border}`, overflow: 'visible', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
-
-              <div style={{ padding: '16px 18px 4px' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>Data Nota #{idx + 1}</div>
-
-                <div style={{ marginBottom: 13 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Nama Driver</label>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: IOH.charcoal, padding: '6px 0' }}>{sub.driver_name}</div>
-                </div>
-
-                <div style={{ marginBottom: 13 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Kategori</label>
-                  <select value={draft.category} onChange={e => setDraft(d => ({ ...d, category: e.target.value }))} style={{ ...inlineInputStyle, appearance: 'none' }}>
-                    <option value="">— Pilih kategori —</option>
-                    {Object.entries(CATEGORY_CONFIG).map(([key, cfg]) => (
-                      <option key={key} value={key}>{cfg.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ marginBottom: 13 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Nominal (Rp)</label>
-                  <input type="number" min={0} value={draft.amount} onChange={e => setDraft(d => ({ ...d, amount: e.target.value }))} placeholder="0" style={inlineInputStyle} />
-                </div>
-
-                <div style={{ marginBottom: 13 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Tanggal Struk</label>
-                  <input type="date" value={draft.bill_date} onChange={e => setDraft(d => ({ ...d, bill_date: e.target.value }))} style={inlineInputStyle} />
-                </div>
-
-                <div style={{ marginBottom: 13 }}>
-                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Tanggal Submit</label>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#bbb', padding: '6px 0' }}>
-                    {new Date(sub.submission_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
-                  </div>
-                </div>
-
-                {draft.category === 'lainnya' && (
-                  <div style={{ marginBottom: 6 }}>
-                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Keterangan</label>
-                    <textarea value={draft.description} onChange={e => setDraft(d => ({ ...d, description: e.target.value }))} placeholder="Opsional" rows={2} style={{ ...inlineInputStyle, resize: 'vertical', lineHeight: 1.5 }} />
-                  </div>
-                )}
-              </div>
-
-              {/* OCR */}
-              <div style={{ borderTop: `1px solid ${IOH.border}` }}>
-                <button onClick={() => setShowOcr(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    {showOcr ? <EyeOff size={13} color={IOH.teal} /> : <Eye size={13} color={IOH.teal} />}
-                    <span style={{ fontSize: 12, fontWeight: 700, color: IOH.teal }}>Teks OCR dari Struk</span>
-                    {sub.ocr_raw_text && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, background: IOH.teal + '18', color: IOH.teal, fontWeight: 700 }}>Ada</span>}
-                  </div>
-                  <ChevronDown size={14} color="#ccc" style={{ transform: showOcr ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                </button>
-                {showOcr && (
-                  <div style={{ padding: '0 18px 16px' }}>
-                    {sub.ocr_raw_text
-                      ? <div style={{ background: '#F8F8FA', borderRadius: 10, padding: '11px 13px', fontSize: 11, color: '#888', whiteSpace: 'pre-wrap', maxHeight: 160, overflowY: 'auto', lineHeight: 1.7, border: `1px solid ${IOH.border}`, fontFamily: 'monospace' }}>{sub.ocr_raw_text}</div>
-                      : <div style={{ fontSize: 12, color: '#ccc', fontStyle: 'italic', textAlign: 'center', padding: '10px 0' }}>Tidak ada data OCR.</div>
-                    }
-                  </div>
-                )}
-              </div>
-
-              {/* Bukti Transfer */}
-              {(sub.amount ?? 0) > HIGH_VALUE_THRESHOLD && (
-                <div style={{ borderTop: `1px solid ${IOH.border}` }}>
-                  <button onClick={() => setShowProof(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      {sub.proof_image_url ? <CheckCircle2 size={13} color={IOH.teal} /> : <AlertTriangle size={13} color="#D97706" />}
-                      <span style={{ fontSize: 12, fontWeight: 700, color: sub.proof_image_url ? IOH.teal : '#D97706' }}>Bukti Transfer Bank</span>
-                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, fontWeight: 700, background: sub.proof_image_url ? IOH.teal + '18' : '#FFFBEB', color: sub.proof_image_url ? IOH.teal : '#D97706' }}>
-                        {sub.proof_image_url ? 'Ada' : 'Belum'}
-                      </span>
-                    </div>
-                    <ChevronDown size={14} color="#ccc" style={{ transform: showProof ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                  </button>
-                  {showProof && (
-                    <div style={{ padding: '0 18px 16px' }}>
-                      {sub.proof_image_url ? (
-                        <>
-                          <div onClick={() => setProofLightbox(sub.proof_image_url!)} style={{ borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${IOH.teal}55`, cursor: 'zoom-in', marginBottom: 8, background: '#f8f8f8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <img src={sub.proof_image_url} alt="bukti transfer" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', display: 'block' }} />
-                          </div>
-                          <div style={{ fontSize: 11, color: '#bbb', textAlign: 'center' }}>Klik untuk perbesar</div>
-                        </>
-                      ) : (
-                        <div style={{ padding: '10px 0', textAlign: 'center' }}>
-                          <div style={{ fontSize: 12, color: '#D97706', fontWeight: 600, marginBottom: 3 }}>Bukti transfer belum diupload driver</div>
-                          <div style={{ fontSize: 11, color: '#bbb' }}>Driver perlu upload via halaman mereka</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Save button */}
-              <div style={{ padding: '14px 18px', borderTop: `1px solid ${IOH.border}` }}>
-                <button onClick={handleSave} disabled={!isDirty || saving} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '11px 0', borderRadius: 12, border: 'none', cursor: isDirty && !saving ? 'pointer' : 'not-allowed', background: savedFlash ? IOH.teal : isDirty && !saving ? IOH.yellow : IOH.border, fontSize: 13, fontWeight: 800, color: savedFlash ? '#fff' : isDirty && !saving ? '#111' : '#bbb', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.2s' }}>
-                  {saving
-                    ? <><div style={{ width: 13, height: 13, border: '2px solid rgba(0,0,0,0.15)', borderTopColor: '#333', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Menyimpan...</>
-                    : savedFlash
-                    ? <><CheckCircle2 size={14} /> Tersimpan</>
-                    : <><Pencil size={14} /> Simpan Perubahan</>
-                  }
-                </button>
-                {!isDirty && !savedFlash && <div style={{ textAlign: 'center', fontSize: 11, color: '#ccc', marginTop: 6 }}>Tidak ada perubahan</div>}
-              </div>
+        ) : (
+          /* ── DESKTOP: side-by-side layout ── */
+          <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+            <div style={{ flex: '0 0 52%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', borderRight: `1px solid ${IOH.border}`, background: '#FAFAFA', overflowY: 'auto', minHeight: 0 }}>
+              <PhotoPanel />
             </div>
-
-            {/* Dot nav */}
-            <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 6 }}>
-              {submissions.slice(Math.max(0, idx - 2), Math.min(submissions.length, idx + 3)).map((_, relI) => {
-                const absI = Math.max(0, idx - 2) + relI
-                return <div key={absI} onClick={() => setIdx(absI)} style={{ width: absI === idx ? 24 : 6, height: 6, borderRadius: 3, background: absI === idx ? IOH.red : IOH.border, cursor: 'pointer', transition: 'all 0.2s' }} />
-              })}
+            <div style={{ flex: 1, minHeight: 0 }}>
+              <DataPanel />
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {proofLightbox && (
@@ -555,7 +605,7 @@ function GridView({ submissions, onEdit, onDelete, onReviewOpen, onPhotoReplaced
   const formatAmount = (n: number) => new Intl.NumberFormat('id-ID').format(n)
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 10 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
       {submissions.map((sub, i) => {
         const missing = getMissingFields(sub)
         const catCfg  = CATEGORY_CONFIG[sub.category] || CATEGORY_CONFIG.lainnya
@@ -624,6 +674,7 @@ function GridView({ submissions, onEdit, onDelete, onReviewOpen, onPhotoReplaced
 // ── Main Admin Page ────────────────────────────────────────────────────────
 export default function AdminPage() {
   const router = useRouter()
+  const isMobile = useIsMobile()
   const [user, setUser] = useState<any>(null)
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
@@ -641,6 +692,7 @@ export default function AdminPage() {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list')
   const [reviewerIndex, setReviewerIndex] = useState<number | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
+  const [filterOpen, setFilterOpen] = useState(false)
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(data => {
@@ -715,17 +767,11 @@ export default function AdminPage() {
   const totalAmount  = filtered.reduce((sum, s) => sum + (s.amount || 0), 0)
   const flaggedCount = filtered.filter(s => getMissingFields(s).length > 0).length
 
-  // ── Pagination calculations ────────────────────────────────────────────
   const pageSize  = viewMode === 'grid' ? PAGE_SIZE_GRID : PAGE_SIZE_LIST
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const safePage  = Math.min(currentPage, totalPages)
   const pageStart = (safePage - 1) * pageSize
   const paginated = filtered.slice(pageStart, pageStart + pageSize)
-
-  // ── reviewerIndex points into `filtered` (not `paginated`) ────────────
-  // Grid: pageStart + i  (i is index within paginated slice)
-  // List: pageStart + idx (idx is index within paginated slice)
-  // Both give absolute index in `filtered`, which is what BillReviewerModal expects.
 
   if (!user) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: IOH.bg }}>
@@ -750,128 +796,169 @@ export default function AdminPage() {
         input[type=date]::-webkit-calendar-picker-indicator { opacity: 0.5; cursor: pointer; }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 99px; }
-        .topbar-logo { height: 50px; width: auto; object-fit: contain; display: block; }
+        .topbar-logo { height: 40px; width: auto; object-fit: contain; display: block; }
         .view-btn-active { background: ${IOH.red} !important; color: #fff !important; border-color: ${IOH.red} !important; }
+        @media (max-width: 639px) {
+          .topbar-logo { height: 32px; }
+          .hide-mobile { display: none !important; }
+          .mobile-full { width: 100% !important; }
+        }
       `}</style>
 
       <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", minHeight: '100vh', background: IOH.bg }}>
 
-        {/* Topbar */}
+        {/* ── Topbar ── */}
         <div style={{ background: IOH.white, borderBottom: `1px solid ${IOH.border}`, position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 2px 16px rgba(0,0,0,0.06)' }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 24px', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <img src="/logo-ioh.png" alt="Indosat Ooredoo Hutchison" className="topbar-logo"
+          <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '0 14px' : '0 24px', height: isMobile ? 54 : 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            {/* Logo + title */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? 10 : 16 }}>
+              <img src="/logo-ioh.png" alt="IOH" className="topbar-logo"
                 onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; const el = e.currentTarget.nextElementSibling as HTMLElement; if (el) el.style.display = 'flex' }} />
-              <div style={{ display: 'none', alignItems: 'center', gap: 10, background: `linear-gradient(135deg, ${IOH.red} 0%, ${IOH.magenta} 100%)`, borderRadius: 10, padding: '6px 14px' }}>
-                <ReceiptText size={16} color="#fff" /><span style={{ fontSize: 14, fontWeight: 800, color: '#fff' }}>IOH</span>
+              <div style={{ display: 'none', alignItems: 'center', gap: 8, background: `linear-gradient(135deg, ${IOH.red} 0%, ${IOH.magenta} 100%)`, borderRadius: 8, padding: '5px 12px' }}>
+                <ReceiptText size={14} color="#fff" /><span style={{ fontSize: 13, fontWeight: 800, color: '#fff' }}>IOH</span>
               </div>
-              <div style={{ width: 1, height: 28, background: IOH.border }} />
+              {!isMobile && <div style={{ width: 1, height: 28, background: IOH.border }} />}
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: '#111', lineHeight: 1 }}>Reimburse</div>
-                <div style={{ fontSize: 10, color: IOH.red, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>Admin Panel</div>
+                <div style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: '#111', lineHeight: 1 }}>Reimburse</div>
+                <div style={{ fontSize: 9, color: IOH.red, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>Admin Panel</div>
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{ display: 'flex', borderRadius: 10, border: `1.5px solid ${IOH.border}`, overflow: 'hidden' }}>
-                <button onClick={() => setViewMode('list')} className={viewMode === 'list' ? 'view-btn-active' : ''} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', border: 'none', background: IOH.white, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: IOH.charcoal, fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}>
-                  <List size={13} /> List
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: isMobile ? 6 : 8, alignItems: 'center' }}>
+              {/* View toggle */}
+              <div style={{ display: 'flex', borderRadius: 8, border: `1.5px solid ${IOH.border}`, overflow: 'hidden' }}>
+                <button onClick={() => setViewMode('list')} className={viewMode === 'list' ? 'view-btn-active' : ''} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: isMobile ? '7px 8px' : '7px 12px', border: 'none', background: IOH.white, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: IOH.charcoal, fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}>
+                  <List size={13} /> {!isMobile && 'List'}
                 </button>
-                <button onClick={() => setViewMode('grid')} className={viewMode === 'grid' ? 'view-btn-active' : ''} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 12px', border: 'none', borderLeft: `1px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: IOH.charcoal, fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}>
-                  <LayoutGrid size={13} /> Grid
+                <button onClick={() => setViewMode('grid')} className={viewMode === 'grid' ? 'view-btn-active' : ''} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: isMobile ? '7px 8px' : '7px 12px', border: 'none', borderLeft: `1px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: IOH.charcoal, fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}>
+                  <LayoutGrid size={13} /> {!isMobile && 'Grid'}
                 </button>
               </div>
+
+              {/* Export — hide label on mobile */}
               <ExportExcelButton allDrivers={drivers} defaultMonth={dateFrom.slice(0, 7)} companyName={companyName} />
-              <button onClick={handleLogout} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#666', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}
+
+              {/* Logout */}
+              <button onClick={handleLogout} title="Keluar" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: isMobile ? '8px' : '8px 14px', borderRadius: 10, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#666', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = IOH.red; (e.currentTarget as HTMLElement).style.color = IOH.red }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = IOH.border; (e.currentTarget as HTMLElement).style.color = '#666' }}>
-                <LogOut size={14} /> Keluar
+                <LogOut size={14} />
+                {!isMobile && ' Keluar'}
               </button>
             </div>
           </div>
         </div>
 
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px 80px' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', padding: isMobile ? '16px 12px 80px' : '28px 24px 80px' }}>
 
-          {/* Filter */}
-          <div style={{ background: IOH.white, borderRadius: 18, padding: 22, marginBottom: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 8, background: IOH.red + '15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <SlidersHorizontal size={14} color={IOH.red} />
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#333', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Filter & Pencarian</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Driver</label>
-                <select value={selectedDriver} onChange={e => setSelectedDriver(e.target.value)} style={inputStyle}>
-                  <option value="all">Semua Driver</option>
-                  {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dari</label>
-                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={inputStyle} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sampai</label>
-                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputStyle} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nama Perusahaan</label>
-                <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="PT. Indosat Tbk" style={inputStyle} />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cari</label>
-                <div style={{ position: 'relative' }}>
-                  <Search size={13} color="#bbb" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Nama, kategori..." style={{ ...inputStyle, paddingLeft: 30 }} />
+          {/* ── Filter ── */}
+          <div style={{ background: IOH.white, borderRadius: 16, padding: isMobile ? '14px 14px' : 22, marginBottom: 16, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}` }}>
+            {/* Filter header — always visible */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: isMobile && !filterOpen ? 0 : 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 26, height: 26, borderRadius: 7, background: IOH.red + '15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <SlidersHorizontal size={13} color={IOH.red} />
                 </div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#333', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Filter & Pencarian</span>
               </div>
+              {/* Mobile: collapse toggle */}
+              {isMobile && (
+                <button onClick={() => setFilterOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#666', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  <Filter size={11} color="#666" />
+                  {filterOpen ? 'Tutup' : 'Filter'}
+                  <ChevronDown size={11} color="#999" style={{ transform: filterOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+              )}
             </div>
+
+            {/* Search always visible on mobile */}
+            {isMobile && (
+              <div style={{ position: 'relative', marginBottom: filterOpen ? 12 : 0 }}>
+                <Search size={13} color="#bbb" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Cari nama, kategori..." style={{ ...inputStyle, paddingLeft: 32, fontSize: 14 }} />
+              </div>
+            )}
+
+            {/* Collapsible on mobile, always open on desktop */}
+            {(!isMobile || filterOpen) && (
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? 10 : 14 }}>
+                <div style={{ gridColumn: isMobile ? '1 / -1' : undefined }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Driver</label>
+                  <select value={selectedDriver} onChange={e => setSelectedDriver(e.target.value)} style={{ ...inputStyle, fontSize: 14 }}>
+                    <option value="all">Semua Driver</option>
+                    {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dari</label>
+                  <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ ...inputStyle, fontSize: 14 }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sampai</label>
+                  <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ ...inputStyle, fontSize: 14 }} />
+                </div>
+                <div style={{ gridColumn: isMobile ? '1 / -1' : undefined }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nama Perusahaan</label>
+                  <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="PT. Indosat Tbk" style={{ ...inputStyle, fontSize: 14 }} />
+                </div>
+                {/* Desktop search (inside grid) */}
+                {!isMobile && (
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cari</label>
+                    <div style={{ position: 'relative' }}>
+                      <Search size={13} color="#bbb" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+                      <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Nama, kategori..." style={{ ...inputStyle, paddingLeft: 30 }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Admin Upload */}
           <AdminUploadSection drivers={drivers} onUploadDone={fetchSubmissions} />
 
           {/* Stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: flaggedCount > 0 ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: flaggedCount > 0 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: isMobile ? 10 : 14, marginBottom: isMobile ? 14 : 20 }}>
             <StatCard label="Total Nota" value={filtered.length} accent={IOH.yellow} />
             <StatCard label="Total Nilai" value={`Rp ${formatAmount(totalAmount)}`} accent={IOH.red} />
-            <StatCard label="Driver Aktif" value={Object.keys(driverGroups).length} accent={IOH.teal} />
+            {!isMobile && <StatCard label="Driver Aktif" value={Object.keys(driverGroups).length} accent={IOH.teal} />}
             {flaggedCount > 0 && <StatCard label="Perlu Dilengkapi" value={flaggedCount} accent={IOH.magenta} sub="Data tidak lengkap" />}
+            {isMobile && <StatCard label="Driver Aktif" value={Object.keys(driverGroups).length} accent={IOH.teal} />}
           </div>
 
           {/* Alert banner */}
           {flaggedCount > 0 && (
-            <div style={{ background: '#FFFBEB', border: '1.5px solid #FFD166', borderRadius: 14, padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
-              <AlertTriangle size={16} color="#D97706" style={{ flexShrink: 0 }} />
+            <div style={{ background: '#FFFBEB', border: '1.5px solid #FFD166', borderRadius: 12, padding: isMobile ? '10px 12px' : '12px 18px', marginBottom: isMobile ? 14 : 20, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <AlertTriangle size={15} color="#D97706" style={{ flexShrink: 0, marginTop: 1 }} />
               <div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>{flaggedCount} nota memiliki data tidak lengkap</div>
-                <div style={{ fontSize: 12, color: '#B45309', marginTop: 2 }}>Field yang wajib diisi: Nominal, Tanggal Struk, Kategori, Bukti Transfer. Klik Edit pada nota tersebut untuk melengkapi.</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#92400E' }}>{flaggedCount} nota perlu dilengkapi</div>
+                <div style={{ fontSize: 11, color: '#B45309', marginTop: 2 }}>Field wajib: Nominal, Tgl Struk, Kategori, Bukti Transfer. Klik Edit untuk melengkapi.</div>
               </div>
             </div>
           )}
 
           {/* Submissions */}
           {loading ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 0', gap: 16 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 0', gap: 16 }}>
               <div style={{ width: 38, height: 38, border: `3px solid ${IOH.yellow}`, borderTopColor: IOH.red, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
               <div style={{ fontSize: 13, color: '#aaa' }}>Memuat data...</div>
             </div>
           ) : filtered.length === 0 ? (
-            <div style={{ background: IOH.white, borderRadius: 18, padding: '60px 24px', textAlign: 'center', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}` }}>
-              <ReceiptText size={38} color="#ddd" style={{ marginBottom: 14 }} />
+            <div style={{ background: IOH.white, borderRadius: 16, padding: '50px 20px', textAlign: 'center', boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}` }}>
+              <ReceiptText size={36} color="#ddd" style={{ marginBottom: 12 }} />
               <div style={{ fontSize: 15, fontWeight: 700, color: '#ccc' }}>Tidak ada nota</div>
               <div style={{ fontSize: 13, color: '#ddd', marginTop: 4 }}>Coba ubah filter atau rentang tanggal</div>
             </div>
           ) : viewMode === 'grid' ? (
 
             /* ── GRID VIEW ── */
-            <div style={{ background: IOH.white, borderRadius: 18, padding: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}` }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#333', marginBottom: 16 }}>
+            <div style={{ background: IOH.white, borderRadius: 16, padding: isMobile ? 12 : 20, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}` }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 12 }}>
                 {filtered.length} Nota
                 {flaggedCount > 0 && <span style={{ marginLeft: 8, fontSize: 11, color: '#D97706', fontWeight: 600 }}>⚠ {flaggedCount} perlu dilengkapi</span>}
-                <span style={{ marginLeft: 8, fontSize: 11, color: '#bbb', fontWeight: 500 }}>· klik foto untuk review detail</span>
+                {!isMobile && <span style={{ marginLeft: 8, fontSize: 11, color: '#bbb', fontWeight: 500 }}>· klik foto untuk review</span>}
               </div>
               <GridView
                 submissions={paginated}
@@ -881,7 +968,6 @@ export default function AdminPage() {
                 onPhotoReplaced={fetchSubmissions}
                 pageOffset={pageStart}
               />
-              {/* ── FIX: Pagination selalu di-render di luar GridView, bukan di dalamnya ── */}
               <Pagination
                 currentPage={safePage}
                 totalItems={filtered.length}
@@ -893,7 +979,7 @@ export default function AdminPage() {
           ) : (
 
             /* ── LIST VIEW ── */
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 8 : 10 }}>
               {paginated.map((sub, idx) => {
                 const catCfg    = CATEGORY_CONFIG[sub.category] || CATEGORY_CONFIG.lainnya
                 const CatIcon   = catCfg.Icon
@@ -902,8 +988,8 @@ export default function AdminPage() {
 
                 return (
                   <div key={sub.id} className="nota-card" style={{
-                    background: IOH.white, borderRadius: 16, padding: '14px 16px',
-                    display: 'flex', gap: 14, alignItems: 'flex-start',
+                    background: IOH.white, borderRadius: 14, padding: isMobile ? '12px 12px' : '14px 16px',
+                    display: 'flex', gap: isMobile ? 10 : 14, alignItems: 'flex-start',
                     boxShadow: isSelected
                       ? `0 0 0 2px ${IOH.yellow}, 0 4px 16px rgba(0,0,0,0.07)`
                       : missing.length > 0 ? '0 0 0 1.5px #FFD166, 0 2px 10px rgba(0,0,0,0.05)'
@@ -919,46 +1005,48 @@ export default function AdminPage() {
                       </div>
                     )}
 
+                    {/* Thumbnail */}
                     {sub.image_url && (
                       <div style={{ position: 'relative', flexShrink: 0 }} onClick={e => { e.stopPropagation(); setReviewerIndex(pageStart + idx) }}>
-                        <img src={sub.image_url} alt="nota" style={{ width: 54, height: 68, objectFit: 'cover', borderRadius: 10, cursor: 'zoom-in', display: 'block', border: `1px solid ${IOH.border}` }} />
+                        <img src={sub.image_url} alt="nota" style={{ width: isMobile ? 48 : 54, height: isMobile ? 60 : 68, objectFit: 'cover', borderRadius: 9, cursor: 'zoom-in', display: 'block', border: `1px solid ${IOH.border}` }} />
                         <div style={{ position: 'absolute', bottom: -4, right: -4 }}>
                           <PhotoReplaceBtn submissionId={sub.id} onReplaced={fetchSubmissions} />
                         </div>
                       </div>
                     )}
 
+                    {/* Content */}
                     <div style={{ flex: 1, minWidth: 0 }} onClick={e => e.stopPropagation()}>
                       {missing.length > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 7, marginBottom: 6, background: '#FFFBEB', border: '1px solid #FFD166', fontSize: 11, color: '#92400E', fontWeight: 600 }}>
-                          <AlertTriangle size={11} color="#D97706" />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 7px', borderRadius: 6, marginBottom: 5, background: '#FFFBEB', border: '1px solid #FFD166', fontSize: 11, color: '#92400E', fontWeight: 600 }}>
+                          <AlertTriangle size={10} color="#D97706" />
                           Data kosong: {missing.join(', ')}
                         </div>
                       )}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 5 }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: '#111' }}>{sub.driver_name}</span>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 9px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: catCfg.bg, color: catCfg.color }}>
-                          <CatIcon size={10} strokeWidth={2.5} /> {catCfg.label}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
+                        <span style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: '#111' }}>{sub.driver_name}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, background: catCfg.bg, color: catCfg.color }}>
+                          <CatIcon size={9} strokeWidth={2.5} /> {catCfg.label}
                         </span>
                       </div>
-                      <div style={{ fontSize: 12, color: '#aaa', display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 4 }}>
+                      <div style={{ fontSize: 11, color: '#aaa', display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 3 }}>
                         {sub.bill_date
-                          ? <span style={{ color: IOH.charcoal, fontWeight: 600 }}>Struk: {formatDate(sub.bill_date)}</span>
-                          : <span style={{ color: '#FF8A8A', fontWeight: 600 }}>⚠ Tgl struk kosong</span>
+                          ? <span style={{ color: IOH.charcoal, fontWeight: 600 }}>{isMobile ? '' : 'Struk: '}{formatDate(sub.bill_date)}</span>
+                          : <span style={{ color: '#FF8A8A', fontWeight: 600 }}>⚠ Tgl kosong</span>
                         }
-                        <span style={{ color: '#ccc' }}>Submit: {formatDate(sub.submission_date)}</span>
+                        {!isMobile && <span style={{ color: '#ccc' }}>Submit: {formatDate(sub.submission_date)}</span>}
                       </div>
                       {sub.amount
-                        ? <div style={{ fontSize: 15, fontWeight: 800, color: '#111', marginBottom: 2 }}>Rp {formatAmount(sub.amount)}</div>
-                        : <div style={{ fontSize: 13, color: '#FF8A8A', fontWeight: 600, marginBottom: 2 }}>⚠ Nominal belum diisi</div>
+                        ? <div style={{ fontSize: isMobile ? 14 : 15, fontWeight: 800, color: '#111', marginBottom: 2 }}>Rp {formatAmount(sub.amount)}</div>
+                        : <div style={{ fontSize: 12, color: '#FF8A8A', fontWeight: 600, marginBottom: 2 }}>⚠ Nominal belum diisi</div>
                       }
                       {sub.category === 'lainnya' && sub.description && (
-                        <div style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>{sub.description}</div>
+                        <div style={{ fontSize: 11, color: '#999', marginBottom: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub.description}</div>
                       )}
-                      {sub.ocr_raw_text && (
+                      {!isMobile && sub.ocr_raw_text && (
                         <button onClick={() => setExpandOcr(expandOcr === sub.id ? null : sub.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', color: '#bbb', fontSize: 11, cursor: 'pointer', padding: '2px 0', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                           {expandOcr === sub.id ? <EyeOff size={11} /> : <Eye size={11} />}
-                          {expandOcr === sub.id ? 'Sembunyikan teks OCR' : 'Lihat teks OCR'}
+                          {expandOcr === sub.id ? 'Sembunyikan OCR' : 'Lihat OCR'}
                         </button>
                       )}
                       {expandOcr === sub.id && sub.ocr_raw_text && (
@@ -966,20 +1054,21 @@ export default function AdminPage() {
                       )}
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 5 : 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                       {(sub.amount ?? 0) > HIGH_VALUE_THRESHOLD && (
-                        <div title={sub.proof_image_url ? 'Lihat bukti transfer' : 'Belum ada bukti transfer'} onClick={() => sub.proof_image_url && setLightbox(sub.proof_image_url)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: `1.5px solid ${sub.proof_image_url ? IOH.teal + '60' : '#FFE082'}`, background: sub.proof_image_url ? IOH.teal + '10' : '#FFFBEB', fontSize: 11, fontWeight: 700, color: sub.proof_image_url ? IOH.teal : '#D97706', cursor: sub.proof_image_url ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
-                          {sub.proof_image_url ? <><CheckCircle2 size={11} /> Bukti ✓</> : <>⚠ Bukti</>}
+                        <div title={sub.proof_image_url ? 'Lihat bukti transfer' : 'Belum ada bukti transfer'} onClick={() => sub.proof_image_url && setLightbox(sub.proof_image_url)} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: isMobile ? '5px 7px' : '5px 10px', borderRadius: 8, border: `1.5px solid ${sub.proof_image_url ? IOH.teal + '60' : '#FFE082'}`, background: sub.proof_image_url ? IOH.teal + '10' : '#FFFBEB', fontSize: 10, fontWeight: 700, color: sub.proof_image_url ? IOH.teal : '#D97706', cursor: sub.proof_image_url ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+                          {sub.proof_image_url ? <><CheckCircle2 size={10} /> {!isMobile && 'Bukti ✓'}</> : <>⚠ {!isMobile && 'Bukti'}</>}
                         </div>
                       )}
-                      <ActionBtn icon={<Pencil size={13} />} label="Edit" color={IOH.charcoal} onClick={() => setEditingSubmission(sub)} />
-                      <ActionBtn icon={<Trash2 size={13} />} label="Hapus" color={IOH.red} onClick={() => setDeleteTarget(sub)} danger />
+                      {/* Mobile: icon-only buttons */}
+                      <ActionBtn icon={<Pencil size={13} />} label="Edit" color={IOH.charcoal} onClick={() => setEditingSubmission(sub)} compact={isMobile} />
+                      <ActionBtn icon={<Trash2 size={13} />} label="Hapus" color={IOH.red} onClick={() => setDeleteTarget(sub)} danger compact={isMobile} />
                     </div>
                   </div>
                 )
               })}
 
-              {/* ── FIX: Pagination ── */}
               <div style={{ marginTop: 4 }}>
                 <Pagination
                   currentPage={safePage}
@@ -989,7 +1078,6 @@ export default function AdminPage() {
                 />
               </div>
             </div>
-
           )}
         </div>
       </div>
@@ -1017,10 +1105,10 @@ export default function AdminPage() {
       )}
 
       {lightbox && (
-        <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999, padding: 24 }}>
+        <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999, padding: 16 }}>
           <img src={lightbox} style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: 12 }} />
-          <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: 20, right: 24, background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 42, height: 42, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
-            <X size={20} color="#fff" />
+          <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: 16, right: 16, background: 'rgba(255,255,255,0.12)', border: 'none', borderRadius: '50%', width: 40, height: 40, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}>
+            <X size={18} color="#fff" />
           </button>
         </div>
       )}
