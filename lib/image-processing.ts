@@ -1,5 +1,9 @@
 import sharp from 'sharp'
 
+// By default, a single sharp/libvips operation can use ALL available CPU
+
+sharp.concurrency(1)
+
 export type ProcessResult =
   | { ok: true; buffer: Buffer; width: number; height: number }
   | { ok: false; reason: string }

@@ -6,13 +6,15 @@ services:
     container_name: nota-reimburse
     restart: unless-stopped
     ports:
-      - "3001:3000"
+      - "3000:3000"
     env_file:
       - .env.local
     environment:
       - NODE_ENV=production
     volumes:
       - ./lib/google-credentials.json:/app/lib/google-credentials.json:ro
+    mem_limit: 1g
+    mem_reservation: 512m
 
   nginx:
     image: nginx:alpine

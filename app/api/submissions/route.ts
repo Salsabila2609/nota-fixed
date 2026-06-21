@@ -6,11 +6,7 @@ import { processReceiptImage } from '@/lib/image-processing'
 import { r2Upload, r2SignedUrl, r2Delete } from '@/lib/r2'
 import { v4 as uuidv4 } from 'uuid'
 import { runOCRBatch } from '@/lib/ocr-google'
-import pLimit from 'p-limit'
-
-// Batas concurrency untuk kerjaan CPU/network per-gambar (sharp processing, upload R2, insert DB).
-// Angka ini sengaja dijaga kecil supaya server tidak overload saat banyak gambar di-upload sekaligus.
-const CONCURRENCY = 3
+import { cpuLimit, ioLimit } from '@/lib/concurrency'
 
 export async function GET(req: NextRequest) {
   const session = await getSessionFromRequest(req)
@@ -61,6 +57,21 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ submissions: withUrls })
 }
 
+// formData keys look like "image0", "image1", ..., "image10", "image11".
+// A plain string sort puts "image10" before "image2" (lexicographic order),
+// which silently misaligns images with their OCR results later (matched by
+// array index). Sort numerically by the trailing digits instead.
+function sortImageKeys(keys: string[]): string[] {
+  return keys.sort((a, b) => {
+    const numA = parseInt(a.replace(/\D/g, ''), 10)
+    const numB = parseInt(b.replace(/\D/g, ''), 10)
+    if (Number.isNaN(numA) || Number.isNaN(numB)) {
+      return a.localeCompare(b)
+    }
+    return numA - numB
+  })
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -68,7 +79,7 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const imageKeys = Array.from(formData.keys()).filter(k => k.startsWith('image'))
-    const images = imageKeys.sort().map(k => formData.get(k) as File).filter(Boolean)
+    const images = sortImageKeys(imageKeys).map(k => formData.get(k) as File).filter(Boolean)
     const submission_date = formData.get('submission_date') as string
 
     if (!images.length || !submission_date) {
@@ -95,13 +106,16 @@ export async function POST(req: NextRequest) {
     }
 
     const results: { ok: boolean; error?: string; filename?: string; submission?: any }[] = []
-    const limit = pLimit(CONCURRENCY)
 
     // ── FASE 1: Sharp semua gambar paralel ──────────────────────────────
+    // Pakai cpuLimit (GLOBAL, shared across all requests) instead of a
+    // per-request limiter. This means if 10 users upload at the same time,
+    // their images all queue through the SAME limiter — only ~6 sharp jobs
+    // run at once process-wide, not 6 per user (which could be 60 total).
     const tSharp = Date.now()
     const sharpResults = await Promise.all(
       images.map((image) =>
-        limit(async () => {
+        cpuLimit(async () => {
           const imageBuffer = Buffer.from(await image.arrayBuffer())
           const processed = await processReceiptImage(imageBuffer)
           return { image, processed }
@@ -133,9 +147,12 @@ export async function POST(req: NextRequest) {
     console.log(`[ALL] OCR batch (${succeeded.length} gambar): ${Date.now() - tOcr}ms`)
 
     // ── FASE 3: R2 upload + DB insert paralel ──────────────────────────
+    // Pakai ioLimit (GLOBAL juga) — ceiling lebih longgar karena ini network
+    // I/O, bukan rebutan CPU, tapi tetap dibatasi biar gak buka ratusan
+    // koneksi sekaligus ke R2/Supabase saat banyak user upload bareng.
     await Promise.all(
       succeeded.map(({ image, processed }, i) =>
-        limit(async () => {
+        ioLimit(async () => {
           const ocrResult = ocrResults[i]
           const label = image.name
 

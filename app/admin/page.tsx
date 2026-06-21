@@ -5,11 +5,12 @@ import EditModal from '@/components/EditModal'
 import Pagination from '@/components/Pagination'
 import AdminUploadSection from '@/components/AdminUploadSection'
 import ExportExcelButton from '@/components/ExportExcelButton'
+import ImageEditorModal from '@/components/ImageEditorModal'
 import {
   Trash2, Pencil, Download, LogOut, ChevronDown,
   ReceiptText, Car, Fuel, ParkingCircle, AlertTriangle, X,
   SlidersHorizontal, Search, Eye, EyeOff, LayoutGrid, List,
-  Camera, ChevronLeft, ChevronRight, CheckCircle2, ImagePlus,
+  Camera, ChevronLeft, ChevronRight, CheckCircle2, ImagePlus,   // ← ImagePlus sudah ada ✓
   Filter
 } from 'lucide-react'
 
@@ -204,23 +205,27 @@ function BillReviewerModal({
   const [showProof, setShowProof] = useState(false)
   const [mobileTab, setMobileTab] = useState<'photo' | 'data'>('photo')
   const [photoUploading, setPhotoUploading] = useState(false)
+  const [proofUploading, setProofUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
   const [localImageUrl, setLocalImageUrl] = useState<string | null>(null)
+  const [localProofUrl, setLocalProofUrl] = useState<string | null>(null)
   const [proofLightbox, setProofLightbox] = useState<string | null>(null)
+  // Bisa 'nota' | 'proof' | null — supaya tahu editor mana yang sedang terbuka
+  const [editorMode, setEditorMode] = useState<'nota' | 'proof' | null>(null)
   const [draft, setDraft] = useState<Record<string, any>>(() => ({
     category:    submissions[startIndex]?.category    || '',
     amount:      submissions[startIndex]?.amount      ?? '',
     bill_date:   submissions[startIndex]?.bill_date   || '',
     description: submissions[startIndex]?.description || '',
   }))
-  const fileRef = useRef<HTMLInputElement>(null)
+  const fileRef  = useRef<HTMLInputElement>(null)
+  const proofRef = useRef<HTMLInputElement>(null)
+  const proofReplaceRef = useRef<HTMLInputElement>(null)
 
   const sub = submissions[idx]
 
-  useEffect(() => {
-    setThumbPage(Math.floor(idx / THUMB_PAGE_SIZE))
-  }, [idx])
+  useEffect(() => { setThumbPage(Math.floor(idx / THUMB_PAGE_SIZE)) }, [idx])
 
   useEffect(() => {
     if (!sub) return
@@ -231,11 +236,14 @@ function BillReviewerModal({
       description: sub.description || '',
     })
     setLocalImageUrl(null)
+    setLocalProofUrl(null)
     setShowProof(false)
     setSavedFlash(false)
+    setEditorMode(null)
   }, [idx, sub?.id])
 
   const displayImageUrl = localImageUrl ?? sub?.image_url
+  const displayProofUrl = localProofUrl ?? sub?.proof_image_url
   const catCfg = CATEGORY_CONFIG[draft.category] || CATEGORY_CONFIG.lainnya
 
   const isDirty =
@@ -246,14 +254,15 @@ function BillReviewerModal({
 
   const missingInDraft: string[] = []
   if (!draft.amount || draft.amount === '' || Number(draft.amount) === 0) missingInDraft.push('Nominal')
-  if (!draft.bill_date)  missingInDraft.push('Tgl Struk')
-  if (!draft.category)   missingInDraft.push('Kategori')
+  if (!draft.bill_date) missingInDraft.push('Tgl Struk')
+  if (!draft.category)  missingInDraft.push('Kategori')
 
   const prev = useCallback(() => setIdx(i => Math.max(0, i - 1)), [])
   const next = useCallback(() => setIdx(i => Math.min(submissions.length - 1, i + 1)), [submissions.length])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (editorMode) return   // block keyboard nav saat editor terbuka
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName)) return
       if (e.key === 'ArrowLeft') prev()
       if (e.key === 'ArrowRight') next()
@@ -261,7 +270,7 @@ function BillReviewerModal({
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [prev, next, onClose])
+  }, [prev, next, onClose, editorMode])
 
   const handleSave = async () => {
     if (!sub || !isDirty) return
@@ -275,28 +284,60 @@ function BillReviewerModal({
       })
       setSavedFlash(true)
       setTimeout(() => setSavedFlash(false), 2500)
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
   }
 
+  // Ganti foto nota (upload file baru)
   const handlePhotoReplace = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const file = e.target.files?.[0]; if (!file) return
     setPhotoUploading(true)
     try {
-      const formData = new FormData()
-      formData.append('file', file)
-      const res = await fetch(`/api/submissions/${sub.id}/replace-photo`, { method: 'POST', body: formData })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.image_url) setLocalImageUrl(data.image_url)
-        onPhotoReplaced()
-      }
-    } finally {
-      setPhotoUploading(false)
-      if (fileRef.current) fileRef.current.value = ''
-    }
+      const fd = new FormData(); fd.append('file', file)
+      const res = await fetch(`/api/submissions/${sub.id}/replace-photo`, { method: 'POST', body: fd })
+      if (res.ok) { const d = await res.json(); if (d.image_url) setLocalImageUrl(d.image_url); onPhotoReplaced() }
+    } finally { setPhotoUploading(false); if (fileRef.current) fileRef.current.value = '' }
+  }
+
+  // Simpan hasil crop/rotate FOTO NOTA → /replace-photo
+  const handleNotaEditorSave = async (editedFile: File) => {
+    setPhotoUploading(true)
+    try {
+      const fd = new FormData(); fd.append('file', editedFile)
+      const res = await fetch(`/api/submissions/${sub.id}/replace-photo`, { method: 'POST', body: fd })
+      if (res.ok) { const d = await res.json(); if (d.image_url) setLocalImageUrl(d.image_url); onPhotoReplaced() }
+    } finally { setPhotoUploading(false); setEditorMode(null) }
+  }
+
+  // Upload bukti transfer baru (belum ada)
+  const handleProofUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return
+    setProofUploading(true)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const res = await fetch(`/api/submissions/${sub.id}/upload-proof`, { method: 'POST', body: fd })
+      if (res.ok) { const d = await res.json(); if (d.proof_image_url) setLocalProofUrl(d.proof_image_url); onPhotoReplaced() }
+    } finally { setProofUploading(false); if (proofRef.current) proofRef.current.value = '' }
+  }
+
+  // Ganti bukti transfer (sudah ada, mau diganti file baru)
+  const handleProofReplace = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]; if (!file) return
+    setProofUploading(true)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const res = await fetch(`/api/submissions/${sub.id}/upload-proof`, { method: 'POST', body: fd })
+      if (res.ok) { const d = await res.json(); if (d.proof_image_url) setLocalProofUrl(d.proof_image_url); onPhotoReplaced() }
+    } finally { setProofUploading(false); if (proofReplaceRef.current) proofReplaceRef.current.value = '' }
+  }
+
+  // Simpan hasil crop/rotate BUKTI TRANSFER → /upload-proof
+  const handleProofEditorSave = async (editedFile: File) => {
+    setProofUploading(true)
+    try {
+      const fd = new FormData(); fd.append('file', editedFile)
+      const res = await fetch(`/api/submissions/${sub.id}/upload-proof`, { method: 'POST', body: fd })
+      if (res.ok) { const d = await res.json(); if (d.proof_image_url) setLocalProofUrl(d.proof_image_url); onPhotoReplaced() }
+    } finally { setProofUploading(false); setEditorMode(null) }
   }
 
   if (!sub) return null
@@ -306,10 +347,10 @@ function BillReviewerModal({
   const thumbEnd   = Math.min(thumbStart + THUMB_PAGE_SIZE, submissions.length)
   const thumbSlice = submissions.slice(thumbStart, thumbEnd)
 
-  // ── Photo Panel Content (shared between mobile/desktop) ────────────────
+  // ── Photo Panel ──────────────────────────────────────────────────────────
   const PhotoPanel = () => (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: isMobile ? '12px 16px' : '16px 28px' }}>
-      <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', background: IOH.white, border: `1px solid ${IOH.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: isMobile ? 260 : 'calc(100vh - 300px)', width: '100%' }}>
+      <div style={{ borderRadius: 16, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.10)', background: '#FFFFFF', border: `1px solid #E8E8EA`, display: 'flex', alignItems: 'center', justifyContent: 'center', maxHeight: isMobile ? 260 : 'calc(100vh - 300px)', width: '100%' }}>
         {displayImageUrl
           ? <img src={displayImageUrl} alt="nota" style={{ maxWidth: '100%', maxHeight: isMobile ? 260 : 'calc(100vh - 320px)', objectFit: 'contain', display: 'block' }} />
           : <div style={{ width: 200, height: 220, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
@@ -319,14 +360,21 @@ function BillReviewerModal({
         }
       </div>
 
-      <div>
+      {/* Tombol aksi foto nota */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
         <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handlePhotoReplace} />
-        <button onClick={() => fileRef.current?.click()} disabled={photoUploading} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: `1.5px solid ${IOH.teal}66`, background: IOH.teal + '12', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: IOH.teal, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+        <button onClick={() => fileRef.current?.click()} disabled={photoUploading} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: `1.5px solid ${'#32BCAD'}66`, background: '#32BCAD' + '12', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#32BCAD', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
           {photoUploading
-            ? <><div style={{ width: 12, height: 12, border: `2px solid ${IOH.teal}44`, borderTopColor: IOH.teal, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Mengunggah...</>
+            ? <><div style={{ width: 12, height: 12, border: `2px solid ${'#32BCAD'}44`, borderTopColor: '#32BCAD', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Mengunggah...</>
             : <><Camera size={13} /> Ganti Foto</>
           }
         </button>
+
+        {displayImageUrl && (
+          <button onClick={() => setEditorMode('nota')} disabled={photoUploading} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 10, border: '1.5px solid #FFCB0588', background: '#FFCB0518', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#B8960A', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <Pencil size={13} /> Edit Foto
+          </button>
+        )}
       </div>
 
       {/* Thumbnail strip */}
@@ -338,7 +386,7 @@ function BillReviewerModal({
             const hasMissing = getMissingFields(s).length > 0
             const thumbUrl = absI === idx ? (localImageUrl ?? s.image_url) : s.image_url
             return (
-              <div key={s.id} onClick={() => setIdx(absI)} style={{ flexShrink: 0, width: 38, height: 50, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', border: isCurrent ? `2.5px solid ${IOH.red}` : hasMissing ? `1.5px solid #FFD166` : `1.5px solid ${IOH.border}`, opacity: isCurrent ? 1 : 0.65, transition: 'all 0.15s', position: 'relative', background: '#f3f3f4' }}>
+              <div key={s.id} onClick={() => setIdx(absI)} style={{ flexShrink: 0, width: 38, height: 50, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', border: isCurrent ? `2.5px solid #ED1C24` : hasMissing ? `1.5px solid #FFD166` : `1.5px solid #E8E8EA`, opacity: isCurrent ? 1 : 0.65, transition: 'all 0.15s', position: 'relative', background: '#f3f3f4' }}>
                 {thumbUrl
                   ? <img src={thumbUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
                   : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ReceiptText size={13} color="#ccc" /></div>
@@ -356,16 +404,16 @@ function BillReviewerModal({
 
         {totalThumbPages > 1 && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <button onClick={() => setThumbPage(p => Math.max(0, p - 1))} disabled={thumbPage === 0} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: thumbPage === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === 0 ? 0.3 : 1 }}>
-              <ChevronLeft size={12} color={IOH.charcoal} />
+            <button onClick={() => setThumbPage(p => Math.max(0, p - 1))} disabled={thumbPage === 0} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid #E8E8EA`, background: '#FFFFFF', cursor: thumbPage === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === 0 ? 0.3 : 1 }}>
+              <ChevronLeft size={12} color="#4D4D4F" />
             </button>
             <div style={{ display: 'flex', gap: 4 }}>
               {Array.from({ length: totalThumbPages }).map((_, pi) => (
-                <div key={pi} onClick={() => setThumbPage(pi)} style={{ width: pi === thumbPage ? 18 : 6, height: 6, borderRadius: 3, background: pi === thumbPage ? IOH.red : IOH.border, cursor: 'pointer', transition: 'all 0.2s' }} />
+                <div key={pi} onClick={() => setThumbPage(pi)} style={{ width: pi === thumbPage ? 18 : 6, height: 6, borderRadius: 3, background: pi === thumbPage ? '#ED1C24' : '#E8E8EA', cursor: 'pointer', transition: 'all 0.2s' }} />
               ))}
             </div>
-            <button onClick={() => setThumbPage(p => Math.min(totalThumbPages - 1, p + 1))} disabled={thumbPage === totalThumbPages - 1} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: thumbPage === totalThumbPages - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === totalThumbPages - 1 ? 0.3 : 1 }}>
-              <ChevronRight size={12} color={IOH.charcoal} />
+            <button onClick={() => setThumbPage(p => Math.min(totalThumbPages - 1, p + 1))} disabled={thumbPage === totalThumbPages - 1} style={{ width: 24, height: 24, borderRadius: 6, border: `1.5px solid #E8E8EA`, background: '#FFFFFF', cursor: thumbPage === totalThumbPages - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: thumbPage === totalThumbPages - 1 ? 0.3 : 1 }}>
+              <ChevronRight size={12} color="#4D4D4F" />
             </button>
             <span style={{ fontSize: 10, color: '#bbb', fontWeight: 600 }}>{thumbStart + 1}–{thumbEnd}/{submissions.length}</span>
           </div>
@@ -376,16 +424,17 @@ function BillReviewerModal({
     </div>
   )
 
-  // ── Data Panel Content (shared between mobile/desktop) ─────────────────
+  // ── Data Panel ───────────────────────────────────────────────────────────
+  // FIX SCROLL: pakai overflowY:'auto' dan pastikan parent kasih height constraint
   const DataPanel = () => (
-    <div style={{ overflowY: 'auto', padding: isMobile ? '16px 16px 80px' : '20px 24px 80px', display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <div style={{ background: IOH.white, borderRadius: 16, border: `1px solid ${IOH.border}`, overflow: 'visible', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
+    <div style={{ overflowY: 'auto', height: '100%', padding: isMobile ? '16px 16px 80px' : '20px 24px 80px', display: 'flex', flexDirection: 'column', gap: 0, boxSizing: 'border-box' }}>
+      <div style={{ background: '#FFFFFF', borderRadius: 16, border: `1px solid #E8E8EA`, overflow: 'visible', boxShadow: '0 1px 6px rgba(0,0,0,0.05)' }}>
         <div style={{ padding: isMobile ? '14px 14px 4px' : '16px 18px 4px' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: '#aaa', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 14 }}>Data Nota #{idx + 1}</div>
 
           <div style={{ marginBottom: 13 }}>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#aaa', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Nama Driver</label>
-            <div style={{ fontSize: 13, fontWeight: 700, color: IOH.charcoal, padding: '6px 0' }}>{sub.driver_name}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#4D4D4F', padding: '6px 0' }}>{sub.driver_name}</div>
           </div>
 
           <div style={{ marginBottom: 13 }}>
@@ -424,51 +473,77 @@ function BillReviewerModal({
         </div>
 
         {/* OCR */}
-        <div style={{ borderTop: `1px solid ${IOH.border}` }}>
+        <div style={{ borderTop: `1px solid #E8E8EA` }}>
           <button onClick={() => setShowOcr(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              {showOcr ? <EyeOff size={13} color={IOH.teal} /> : <Eye size={13} color={IOH.teal} />}
-              <span style={{ fontSize: 12, fontWeight: 700, color: IOH.teal }}>Teks OCR dari Struk</span>
-              {sub.ocr_raw_text && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, background: IOH.teal + '18', color: IOH.teal, fontWeight: 700 }}>Ada</span>}
+              {showOcr ? <EyeOff size={13} color="#32BCAD" /> : <Eye size={13} color="#32BCAD" />}
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#32BCAD' }}>Teks OCR dari Struk</span>
+              {sub.ocr_raw_text && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, background: '#32BCAD18', color: '#32BCAD', fontWeight: 700 }}>Ada</span>}
             </div>
             <ChevronDown size={14} color="#ccc" style={{ transform: showOcr ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
           </button>
           {showOcr && (
             <div style={{ padding: '0 16px 16px' }}>
               {sub.ocr_raw_text
-                ? <div style={{ background: '#F8F8FA', borderRadius: 10, padding: '11px 13px', fontSize: 11, color: '#888', whiteSpace: 'pre-wrap', maxHeight: 160, overflowY: 'auto', lineHeight: 1.7, border: `1px solid ${IOH.border}`, fontFamily: 'monospace' }}>{sub.ocr_raw_text}</div>
+                ? <div style={{ background: '#F8F8FA', borderRadius: 10, padding: '11px 13px', fontSize: 11, color: '#888', whiteSpace: 'pre-wrap', maxHeight: 160, overflowY: 'auto', lineHeight: 1.7, border: `1px solid #E8E8EA`, fontFamily: 'monospace' }}>{sub.ocr_raw_text}</div>
                 : <div style={{ fontSize: 12, color: '#ccc', fontStyle: 'italic', textAlign: 'center', padding: '10px 0' }}>Tidak ada data OCR.</div>
               }
             </div>
           )}
         </div>
 
-        {/* Bukti Transfer */}
+        {/* ── Bukti Transfer — admin bisa upload DAN edit ── */}
         {(sub.amount ?? 0) > HIGH_VALUE_THRESHOLD && (
-          <div style={{ borderTop: `1px solid ${IOH.border}` }}>
+          <div style={{ borderTop: `1px solid #E8E8EA` }}>
             <button onClick={() => setShowProof(v => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                {sub.proof_image_url ? <CheckCircle2 size={13} color={IOH.teal} /> : <AlertTriangle size={13} color="#D97706" />}
-                <span style={{ fontSize: 12, fontWeight: 700, color: sub.proof_image_url ? IOH.teal : '#D97706' }}>Bukti Transfer Bank</span>
-                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, fontWeight: 700, background: sub.proof_image_url ? IOH.teal + '18' : '#FFFBEB', color: sub.proof_image_url ? IOH.teal : '#D97706' }}>
-                  {sub.proof_image_url ? 'Ada' : 'Belum'}
+                {displayProofUrl ? <CheckCircle2 size={13} color="#32BCAD" /> : <AlertTriangle size={13} color="#D97706" />}
+                <span style={{ fontSize: 12, fontWeight: 700, color: displayProofUrl ? '#32BCAD' : '#D97706' }}>Bukti Transfer Bank</span>
+                <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 5, fontWeight: 700, background: displayProofUrl ? '#32BCAD18' : '#FFFBEB', color: displayProofUrl ? '#32BCAD' : '#D97706' }}>
+                  {displayProofUrl ? 'Ada' : 'Belum'}
                 </span>
               </div>
               <ChevronDown size={14} color="#ccc" style={{ transform: showProof ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
             </button>
+
             {showProof && (
               <div style={{ padding: '0 16px 16px' }}>
-                {sub.proof_image_url ? (
+                {displayProofUrl ? (
+                  /* Bukti sudah ada: tampil preview + tombol edit & ganti */
                   <>
-                    <div onClick={() => setProofLightbox(sub.proof_image_url!)} style={{ borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${IOH.teal}55`, cursor: 'zoom-in', marginBottom: 8, background: '#f8f8f8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <img src={sub.proof_image_url} alt="bukti transfer" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', display: 'block' }} />
+                    <div onClick={() => setProofLightbox(displayProofUrl)} style={{ borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${'#32BCAD'}55`, cursor: 'zoom-in', marginBottom: 10, background: '#f8f8f8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img src={displayProofUrl} alt="bukti transfer" style={{ maxWidth: '100%', maxHeight: 200, objectFit: 'contain', display: 'block' }} />
                     </div>
-                    <div style={{ fontSize: 11, color: '#bbb', textAlign: 'center' }}>Klik untuk perbesar</div>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {/* Edit (crop/rotate) bukti */}
+                      <button onClick={() => setEditorMode('proof')} disabled={proofUploading} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: '1.5px solid #FFCB0588', background: '#FFCB0518', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#B8960A', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        <Pencil size={12} /> Edit Bukti
+                      </button>
+                      {/* Ganti file bukti */}
+                      <input ref={proofReplaceRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleProofReplace} />
+                      <button onClick={() => proofReplaceRef.current?.click()} disabled={proofUploading} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '8px 12px', borderRadius: 10, border: `1.5px solid ${'#32BCAD'}66`, background: '#32BCAD12', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: '#32BCAD', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                        {proofUploading
+                          ? <><div style={{ width: 10, height: 10, border: `2px solid ${'#32BCAD'}44`, borderTopColor: '#32BCAD', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Mengunggah...</>
+                          : <><ImagePlus size={12} /> Ganti File</>
+                        }
+                      </button>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#bbb', marginTop: 6, textAlign: 'center' }}>Klik foto untuk perbesar</div>
                   </>
                 ) : (
-                  <div style={{ padding: '10px 0', textAlign: 'center' }}>
-                    <div style={{ fontSize: 12, color: '#D97706', fontWeight: 600, marginBottom: 3 }}>Bukti transfer belum diupload driver</div>
-                    <div style={{ fontSize: 11, color: '#bbb' }}>Driver perlu upload via halaman mereka</div>
+                  /* Bukti belum ada: tombol upload */
+                  <div style={{ padding: '4px 0' }}>
+                    <div style={{ fontSize: 12, color: '#D97706', fontWeight: 600, marginBottom: 10 }}>
+                      Bukti transfer belum diupload. Admin bisa upload di sini.
+                    </div>
+                    <input ref={proofRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleProofUpload} />
+                    <button onClick={() => proofRef.current?.click()} disabled={proofUploading} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '12px 0', borderRadius: 11, border: `1.5px dashed #FFD166`, background: '#FFFBEB', cursor: 'pointer', fontSize: 13, fontWeight: 700, color: '#D97706', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                      {proofUploading
+                        ? <><div style={{ width: 12, height: 12, border: '2px solid #F59E0B44', borderTopColor: '#F59E0B', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Mengunggah...</>
+                        : <><ImagePlus size={14} /> Upload Bukti Transfer</>
+                      }
+                    </button>
+                    <div style={{ fontSize: 11, color: '#bbb', marginTop: 6, textAlign: 'center' }}>Screenshot m-banking atau struk ATM</div>
                   </div>
                 )}
               </div>
@@ -477,12 +552,11 @@ function BillReviewerModal({
         )}
 
         {/* Save button */}
-        <div style={{ padding: '14px 16px', borderTop: `1px solid ${IOH.border}` }}>
-          <button onClick={handleSave} disabled={!isDirty || saving} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '13px 0', borderRadius: 12, border: 'none', cursor: isDirty && !saving ? 'pointer' : 'not-allowed', background: savedFlash ? IOH.teal : isDirty && !saving ? IOH.yellow : IOH.border, fontSize: 14, fontWeight: 800, color: savedFlash ? '#fff' : isDirty && !saving ? '#111' : '#bbb', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.2s' }}>
+        <div style={{ padding: '14px 16px', borderTop: `1px solid #E8E8EA` }}>
+          <button onClick={handleSave} disabled={!isDirty || saving} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '13px 0', borderRadius: 12, border: 'none', cursor: isDirty && !saving ? 'pointer' : 'not-allowed', background: savedFlash ? '#32BCAD' : isDirty && !saving ? '#FFCB05' : '#E8E8EA', fontSize: 14, fontWeight: 800, color: savedFlash ? '#fff' : isDirty && !saving ? '#111' : '#bbb', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.2s' }}>
             {saving
               ? <><div style={{ width: 13, height: 13, border: '2px solid rgba(0,0,0,0.15)', borderTopColor: '#333', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> Menyimpan...</>
-              : savedFlash
-              ? <><CheckCircle2 size={14} /> Tersimpan</>
+              : savedFlash ? <><CheckCircle2 size={14} /> Tersimpan</>
               : <><Pencil size={14} /> Simpan Perubahan</>
             }
           </button>
@@ -494,102 +568,124 @@ function BillReviewerModal({
       <div style={{ marginTop: 14, display: 'flex', justifyContent: 'center', gap: 6 }}>
         {submissions.slice(Math.max(0, idx - 2), Math.min(submissions.length, idx + 3)).map((_, relI) => {
           const absI = Math.max(0, idx - 2) + relI
-          return <div key={absI} onClick={() => setIdx(absI)} style={{ width: absI === idx ? 24 : 6, height: 6, borderRadius: 3, background: absI === idx ? IOH.red : IOH.border, cursor: 'pointer', transition: 'all 0.2s' }} />
+          return <div key={absI} onClick={() => setIdx(absI)} style={{ width: absI === idx ? 24 : 6, height: 6, borderRadius: 3, background: absI === idx ? '#ED1C24' : '#E8E8EA', cursor: 'pointer', transition: 'all 0.2s' }} />
         })}
       </div>
     </div>
   )
 
   return (
-    <div
-      style={{ position: 'fixed', inset: 0, background: 'rgba(77,77,79,0.45)', backdropFilter: 'blur(8px)', zIndex: 1100, display: 'flex', flexDirection: 'column', fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div style={{ position: 'absolute', inset: isMobile ? 0 : 20, background: IOH.bg, borderRadius: isMobile ? 0 : 24, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,0.22)' }}>
+    <>
+      <div
+        style={{ position: 'fixed', inset: 0, background: 'rgba(77,77,79,0.45)', backdropFilter: 'blur(8px)', zIndex: 1100, display: 'flex', flexDirection: 'column', fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+        onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      >
+        <div style={{ position: 'absolute', inset: isMobile ? 0 : 20, background: '#F5F5F7', borderRadius: isMobile ? 0 : 24, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,0.22)' }}>
 
-        {/* Header */}
-        <div style={{ background: IOH.white, borderBottom: `1px solid ${IOH.border}`, padding: isMobile ? '12px 14px' : '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 8, background: catCfg.bg, border: `1px solid ${catCfg.color}22`, flexShrink: 0 }}>
-              <catCfg.Icon size={11} color={catCfg.color} strokeWidth={2.5} />
-              <span style={{ fontSize: 11, fontWeight: 700, color: catCfg.color }}>{catCfg.label}</span>
+          {/* Header */}
+          <div style={{ background: '#FFFFFF', borderBottom: `1px solid #E8E8EA`, padding: isMobile ? '12px 14px' : '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px', borderRadius: 8, background: catCfg.bg, border: `1px solid ${catCfg.color}22`, flexShrink: 0 }}>
+                <catCfg.Icon size={11} color={catCfg.color} strokeWidth={2.5} />
+                <span style={{ fontSize: 11, fontWeight: 700, color: catCfg.color }}>{catCfg.label}</span>
+              </div>
+              <span style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub.driver_name}</span>
+              {missingInDraft.length > 0 && !isMobile && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 7, background: '#FFFBEB', border: '1px solid #FFD166' }}>
+                  <AlertTriangle size={11} color="#D97706" />
+                  <span style={{ fontSize: 11, color: '#92400E', fontWeight: 700 }}>Kosong: {missingInDraft.join(', ')}</span>
+                </div>
+              )}
+              {savedFlash && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 7, background: '#F0FDF4', border: `1px solid ${'#32BCAD'}55` }}>
+                  <CheckCircle2 size={12} color="#32BCAD" />
+                  <span style={{ fontSize: 11, color: '#32BCAD', fontWeight: 700 }}>Tersimpan</span>
+                </div>
+              )}
             </div>
-            <span style={{ fontSize: isMobile ? 13 : 14, fontWeight: 700, color: '#111', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub.driver_name}</span>
-            {missingInDraft.length > 0 && !isMobile && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 7, background: '#FFFBEB', border: '1px solid #FFD166' }}>
-                <AlertTriangle size={11} color="#D97706" />
-                <span style={{ fontSize: 11, color: '#92400E', fontWeight: 700 }}>Kosong: {missingInDraft.join(', ')}</span>
-              </div>
-            )}
-            {savedFlash && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 7, background: '#F0FDF4', border: `1px solid ${IOH.teal}55` }}>
-                <CheckCircle2 size={12} color={IOH.teal} />
-                <span style={{ fontSize: 11, color: IOH.teal, fontWeight: 700 }}>Tersimpan</span>
-              </div>
-            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <span style={{ fontSize: 11, color: '#aaa', fontWeight: 600 }}>{idx + 1}/{submissions.length}</span>
+              <button onClick={prev} disabled={idx === 0} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid #E8E8EA`, background: '#FFFFFF', cursor: idx === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: idx === 0 ? 0.3 : 1 }}>
+                <ChevronLeft size={15} color="#4D4D4F" />
+              </button>
+              <button onClick={next} disabled={idx === submissions.length - 1} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid #E8E8EA`, background: '#FFFFFF', cursor: idx === submissions.length - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: idx === submissions.length - 1 ? 0.3 : 1 }}>
+                <ChevronRight size={15} color="#4D4D4F" />
+              </button>
+              <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid #E8E8EA`, background: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <X size={14} color="#4D4D4F" />
+              </button>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <span style={{ fontSize: 11, color: '#aaa', fontWeight: 600 }}>{idx + 1}/{submissions.length}</span>
-            <button onClick={prev} disabled={idx === 0} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: idx === 0 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: idx === 0 ? 0.3 : 1 }}>
-              <ChevronLeft size={15} color={IOH.charcoal} />
-            </button>
-            <button onClick={next} disabled={idx === submissions.length - 1} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: idx === submissions.length - 1 ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: idx === submissions.length - 1 ? 0.3 : 1 }}>
-              <ChevronRight size={15} color={IOH.charcoal} />
-            </button>
-            <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <X size={14} color={IOH.charcoal} />
-            </button>
-          </div>
+
+          {/* Mobile warning */}
+          {isMobile && missingInDraft.length > 0 && (
+            <div style={{ padding: '7px 14px', background: '#FFFBEB', borderBottom: '1px solid #FFD166', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertTriangle size={11} color="#D97706" />
+              <span style={{ fontSize: 11, color: '#92400E', fontWeight: 700 }}>Kosong: {missingInDraft.join(', ')}</span>
+            </div>
+          )}
+
+          {/* Mobile tabs */}
+          {isMobile && (
+            <div style={{ display: 'flex', borderBottom: `1px solid #E8E8EA`, background: '#FFFFFF', flexShrink: 0 }}>
+              {(['photo', 'data'] as const).map(tab => (
+                <button key={tab} onClick={() => setMobileTab(tab)} style={{ flex: 1, padding: '11px 0', border: 'none', borderBottom: mobileTab === tab ? `2.5px solid #ED1C24` : '2.5px solid transparent', background: 'none', fontSize: 12, fontWeight: 700, color: mobileTab === tab ? '#ED1C24' : '#aaa', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}>
+                  {tab === 'photo' ? '📷 Foto Struk' : '✏️ Data & Edit'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Body — FIX: desktop side punya minHeight:0 agar children bisa scroll */}
+          {isMobile ? (
+            <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+              {mobileTab === 'photo' ? <PhotoPanel /> : <DataPanel />}
+            </div>
+          ) : (
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+              {/* Kiri: foto */}
+              <div style={{ flex: '0 0 52%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', borderRight: `1px solid #E8E8EA`, background: '#FAFAFA', overflowY: 'auto', minHeight: 0 }}>
+                <PhotoPanel />
+              </div>
+              {/* Kanan: data — FIX: height:100% + overflow:hidden wrapper, DataPanel sendiri yang scroll */}
+              <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <DataPanel />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Mobile warning strip */}
-        {isMobile && missingInDraft.length > 0 && (
-          <div style={{ padding: '7px 14px', background: '#FFFBEB', borderBottom: '1px solid #FFD166', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <AlertTriangle size={11} color="#D97706" />
-            <span style={{ fontSize: 11, color: '#92400E', fontWeight: 700 }}>Kosong: {missingInDraft.join(', ')}</span>
-          </div>
-        )}
-
-        {/* Mobile tab switcher */}
-        {isMobile && (
-          <div style={{ display: 'flex', borderBottom: `1px solid ${IOH.border}`, background: IOH.white, flexShrink: 0 }}>
-            {(['photo', 'data'] as const).map(tab => (
-              <button key={tab} onClick={() => setMobileTab(tab)} style={{ flex: 1, padding: '11px 0', border: 'none', borderBottom: mobileTab === tab ? `2.5px solid ${IOH.red}` : '2.5px solid transparent', background: 'none', fontSize: 12, fontWeight: 700, color: mobileTab === tab ? IOH.red : '#aaa', cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}>
-                {tab === 'photo' ? '📷 Foto Struk' : '✏️ Data & Edit'}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Body */}
-        {isMobile ? (
-          /* ── MOBILE: tab-based layout ── */
-          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            {mobileTab === 'photo' ? <PhotoPanel /> : <DataPanel />}
-          </div>
-        ) : (
-          /* ── DESKTOP: side-by-side layout ── */
-          <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-            <div style={{ flex: '0 0 52%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', borderRight: `1px solid ${IOH.border}`, background: '#FAFAFA', overflowY: 'auto', minHeight: 0 }}>
-              <PhotoPanel />
-            </div>
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <DataPanel />
-            </div>
+        {proofLightbox && (
+          <div onClick={() => setProofLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.97)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300, padding: 20 }}>
+            <img src={proofLightbox} style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: 10 }} alt="bukti transfer" />
+            <button onClick={() => setProofLightbox(null)} style={{ position: 'absolute', top: 16, right: 16, width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={18} color="#fff" />
+            </button>
+            <div style={{ position: 'absolute', bottom: 16, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Klik di mana saja untuk tutup</div>
           </div>
         )}
       </div>
 
-      {proofLightbox && (
-        <div onClick={() => setProofLightbox(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.97)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1300, padding: 20 }}>
-          <img src={proofLightbox} style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: 10 }} alt="bukti transfer" />
-          <button onClick={() => setProofLightbox(null)} style={{ position: 'absolute', top: 16, right: 16, width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <X size={18} color="#fff" />
-          </button>
-          <div style={{ position: 'absolute', bottom: 16, color: 'rgba(255,255,255,0.4)', fontSize: 12 }}>Klik di mana saja untuk tutup</div>
-        </div>
+      {/* ImageEditorModal untuk FOTO NOTA */}
+      {editorMode === 'nota' && (
+        <ImageEditorModal
+          imageUrl={`/api/submissions/${sub.id}/image-proxy?type=nota`}
+          onClose={() => setEditorMode(null)}
+          onSave={handleNotaEditorSave}
+          title="Edit Foto Nota"
+        />
       )}
-    </div>
+
+      {/* ImageEditorModal untuk BUKTI TRANSFER */}
+      {editorMode === 'proof' && (
+        <ImageEditorModal
+          imageUrl={`/api/submissions/${sub.id}/image-proxy?type=proof`}
+          onClose={() => setEditorMode(null)}
+          onSave={handleProofEditorSave}
+          title="Edit Bukti Transfer"
+        />
+      )}
+    </>
   )
 }
 

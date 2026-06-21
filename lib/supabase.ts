@@ -1,8 +1,20 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key'
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key'
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+// Fail loudly at boot instead of silently falling back to placeholders that
+// would make every Supabase call fail with a confusing runtime error.
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY env vars'
+  )
+}
+
+if (!supabaseServiceKey) {
+  throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY env var')
+}
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
@@ -29,8 +41,8 @@ export type Submission = {
   bill_date?: string
   image_path: string
   image_url?: string
-  proof_image_path?: string   
-  proof_image_url?: string   
+  proof_image_path?: string
+  proof_image_url?: string
   status: 'pending' | 'approved' | 'rejected'
   blur_rejected: boolean
   ocr_raw_text?: string
