@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   const dateFrom = searchParams.get('from')
   const dateTo = searchParams.get('to')
   const status = searchParams.get('status')
+  const showArchived = searchParams.get('show_archived') === 'true'
 
   let query = supabaseAdmin
     .from('submissions')
@@ -32,6 +33,10 @@ export async function GET(req: NextRequest) {
   if (dateFrom) query = query.gte('submission_date', dateFrom)
   if (dateTo) query = query.lte('submission_date', dateTo)
   if (status) query = query.eq('status', status)
+
+  if (!showArchived) {
+    query = query.is('archived_at', null)
+  }
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

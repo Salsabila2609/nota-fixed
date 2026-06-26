@@ -190,7 +190,7 @@ export async function POST(req: NextRequest) {
     })
 
     // ── Return file ────────────────────────────────────────────────────────
-    const filename = `REKAP_BBM_DRIVER_${periodeLabel.replace(/\s/g, '_')}.xlsx`
+    const filename = `REKAP_BBM_DRIVER_${date_from}_${date_to}.xlsx`
     const excelBody = new Uint8Array(excelBuffer)
 
     return new NextResponse(excelBody, {
@@ -223,12 +223,28 @@ function buildDescription(sub: any, plate?: string): string {
 }
 
 function buildPeriodeLabel(from: string, to: string): string {
-  const d = new Date(from)
-  const monthNames = [
-    'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI',
-    'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER',
-  ]
-  return `${monthNames[d.getMonth()]} ${d.getFullYear()}`
+  const fmtShort = (s: string) => {
+    const d = new Date(s)
+    return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+  // Kalau from dan to bulan+tahun sama, tampilkan sebagai "1-15 APR 2026"
+  const df = new Date(from)
+  const dt = new Date(to)
+  if (df.getMonth() === dt.getMonth() && df.getFullYear() === dt.getFullYear()) {
+    const monthNames = [
+      'JANUARI', 'FEBRUARI', 'MARET', 'APRIL', 'MEI', 'JUNI',
+      'JULI', 'AGUSTUS', 'SEPTEMBER', 'OKTOBER', 'NOVEMBER', 'DESEMBER',
+    ]
+    // Kalau full bulan, tampilkan nama bulan saja
+    const firstDay = new Date(df.getFullYear(), df.getMonth(), 1)
+    const lastDay = new Date(df.getFullYear(), df.getMonth() + 1, 0)
+    if (df.getDate() === 1 && dt.getDate() === lastDay.getDate()) {
+      return `${monthNames[df.getMonth()]} ${df.getFullYear()}`
+    }
+    return `${df.getDate()}-${dt.getDate()} ${monthNames[df.getMonth()]} ${df.getFullYear()}`
+  }
+  // Beda bulan: tampilkan full range
+  return `${fmtShort(from)} s/d ${fmtShort(to)}`
 }
 
 function buildReportDate(): string {

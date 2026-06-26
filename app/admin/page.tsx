@@ -933,7 +933,12 @@ export default function AdminPage() {
               </div>
 
               {/* Export — hide label on mobile */}
-              <ExportExcelButton allDrivers={drivers} defaultMonth={dateFrom.slice(0, 7)} companyName={companyName} />
+              <ExportExcelButton
+                allDrivers={drivers}
+                defaultMonth={dateFrom.slice(0, 7)}
+                companyName={companyName}
+                onArchiveDone={fetchSubmissions} 
+              />
 
               {/* Logout */}
               <button onClick={handleLogout} title="Keluar" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: isMobile ? '8px' : '8px 14px', borderRadius: 10, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', fontSize: 13, fontWeight: 600, color: '#666', fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s' }}
