@@ -23,4 +23,4 @@ Thumbs.db
 
 # Docker
 docker-compose.override.yml
-lib/google-credentials.json
+lib/google-credentials.jsonservice-acc.json
