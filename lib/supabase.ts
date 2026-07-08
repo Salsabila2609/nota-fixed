@@ -22,17 +22,28 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
   auth: { autoRefreshToken: false, persistSession: false }
 })
 
+// NOTE: role 'cse' sudah dimigrasikan menjadi 'cse' (lihat migration_cse_branch.sql).
+// CSE = Customer Service Executive, ditempatkan di 1 branch, memegang 1 nama MC.
 export type User = {
   id: string
   name: string
   username: string
   email?: string
-  role: 'driver' | 'admin'
+  role: 'driver' | 'admin' | 'cse'
+  branch_id?: string | null   // hanya relevan utk role 'cse'
+  mc_name?: string | null     // hanya relevan utk role 'cse' — 1 CSE = 1 MC
+}
+
+export type Branch = {
+  id: string
+  name: string
+  brand: 'IM3' | '3ID'
+  created_at?: string
 }
 
 export type Submission = {
   id: string
-  driver_id: string
+  driver_id: string          // tetap dipakai sbg "uploader_id" generik (driver ATAU cse)
   driver_name: string
   category: string
   description?: string
@@ -41,8 +52,10 @@ export type Submission = {
   bill_date?: string
   image_path: string
   image_url?: string
-  proof_image_path?: string
+  proof_image_path?: string  // bukti transfer bank, wajib jika amount > threshold
   proof_image_url?: string
+  marking_image_path?: string  // "Foto Bukti CSE" (dulu disebut Foto Bukti cse) — wajib tiap nota dari CSE
+  marking_image_url?: string
   status: 'pending' | 'approved' | 'rejected'
   blur_rejected: boolean
   ocr_raw_text?: string

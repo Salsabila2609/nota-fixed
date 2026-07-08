@@ -4,13 +4,10 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { r2Upload, r2Delete, r2SignedUrl } from '@/lib/r2'
 import { v4 as uuidv4 } from 'uuid'
 
-console.log('upload-proof route loaded')
-
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  console.log('upload-proof POST called')
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -26,7 +23,7 @@ export async function POST(
     return NextResponse.json({ error: 'Submission tidak ditemukan' }, { status: 404 })
   }
 
-  if (session.role === 'driver' && sub.driver_id !== session.id) {
+  if (session.role !== 'admin' && sub.driver_id !== session.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -46,7 +43,8 @@ export async function POST(
     return NextResponse.json({ error: 'File harus berupa gambar' }, { status: 400 })
   }
 
-  // Hapus proof lama dari R2 kalau ada
+  // Hapus proof lama dari R2 kalau ada — jadi endpoint ini otomatis berlaku
+  // sebagai "replace" kalau dipanggil ulang (dipakai juga oleh admin/EditModal).
   if (sub.proof_image_path) {
     await r2Delete(sub.proof_image_path)
   }

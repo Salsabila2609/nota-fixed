@@ -4,8 +4,6 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { createSession } from '@/lib/auth'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
-// Allow at most 5 attempts per IP+username pair per minute, and a looser
-// 20/minute cap per IP alone so one IP can't hammer many usernames.
 const ATTEMPTS_PER_IDENTITY = 5
 const ATTEMPTS_PER_IP = 20
 const WINDOW_MS = 60 * 1000
@@ -37,7 +35,6 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Find user
     const { data: user, error } = await supabaseAdmin
       .from('users')
       .select('id, name, username, role, password_hash')
@@ -48,19 +45,33 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Username atau password salah' }, { status: 401 })
     }
 
-    // Verify password
     const valid = await bcrypt.compare(password, user.password_hash)
     if (!valid) {
       return NextResponse.json({ error: 'Username atau password salah' }, { status: 401 })
     }
 
-    // Create session
     const token = await createSession({
       id: user.id,
       name: user.name,
       username: user.username,
       role: user.role
     })
+
+    // ── Audit log: catat event login (gak boleh nge-block login kalau gagal) ──
+    try {
+      const now = new Date().toISOString()
+      await Promise.all([
+        supabaseAdmin.from('login_audit_log').insert({
+          user_id: user.id,
+          event: 'login',
+          ip_address: ip,
+          user_agent: req.headers.get('user-agent') || null,
+        }),
+        supabaseAdmin.from('users').update({ last_login_at: now }).eq('id', user.id),
+      ])
+    } catch (e) {
+      console.error('Audit log error (login):', e)
+    }
 
     const response = NextResponse.json({
       user: { id: user.id, name: user.name, username: user.username, role: user.role }

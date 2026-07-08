@@ -30,6 +30,7 @@ const C = {
 type Sub = Submission & {
   imageData?:      Uint8Array
   proofImageData?: Uint8Array
+  markingImageData?: Uint8Array  
   bill_date?:      string
   submission_date?: string
 }
@@ -57,7 +58,7 @@ function buildSlots(subs: Sub[]): Slot[] {
   let n = 1
   for (const sub of subs) {
     slots.push({ type: 'nota', sub, num: n })
-    if ((sub.amount ?? 0) > 250_000 && (sub.proofImageData || sub.proof_image_path)) {
+    if (sub.markingImageData || sub.marking_image_path) {
       slots.push({ type: 'proof', sub, num: n })
     }
     n++
@@ -218,7 +219,7 @@ async function drawCell(
   const imgW = cw - IMG_PAD * 2 - 4
   const imgH = ch - LABEL_H - IMG_PAD * 2 - bannerOffset - 2
 
-  const rawData = isProof ? slot.sub.proofImageData : slot.sub.imageData
+  const rawData = isProof ? slot.sub.markingImageData : slot.sub.imageData
 
   if (rawData) {
     try {
@@ -235,7 +236,7 @@ async function drawCell(
     }
   } else {
     const msg = isProof
-      ? (slot.sub.proof_image_path ? 'Foto tidak ada' : 'Belum diupload')
+      ? (slot.sub.marking_image_path ? 'Foto tidak ada' : 'Belum diupload')
       : 'Foto tidak ada'
     drawNoImage(page, imgX, imgY, imgW, imgH, reg, msg)
   }

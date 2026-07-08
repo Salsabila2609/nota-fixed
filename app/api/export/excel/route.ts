@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
     let query = supabaseAdmin
       .from('submissions')
       .select('*')
+      .is('archived_at', null)
       .gte('bill_date', date_from)
       .lte('bill_date', date_to)
       .order('driver_name', { ascending: true })

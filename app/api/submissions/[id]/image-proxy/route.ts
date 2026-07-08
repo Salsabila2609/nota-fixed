@@ -12,13 +12,12 @@ export async function GET(
 
   const { id } = await params
 
-  // Ambil image_path dari DB — tentukan mana yang diminta via query param
   const { searchParams } = new URL(req.url)
-  const type = searchParams.get('type') || 'nota' // 'nota' | 'proof'
+  const type = searchParams.get('type') || 'nota' // 'nota' | 'proof' | 'marking'
 
   const { data: sub, error } = await supabaseAdmin
     .from('submissions')
-    .select('image_path, proof_image_path, driver_id')
+    .select('image_path, proof_image_path, marking_image_path, driver_id')
     .eq('id', id)
     .single()
 
@@ -26,12 +25,15 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  // Kalau driver, pastikan hanya akses miliknya
-  if (session.role === 'driver' && sub.driver_id !== session.id) {
+  if (session.role !== 'admin' && sub.driver_id !== session.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const path = type === 'proof' ? sub.proof_image_path : sub.image_path
+  const path =
+    type === 'proof' ? sub.proof_image_path :
+    type === 'marking' ? sub.marking_image_path :
+    sub.image_path
+
   if (!path) return NextResponse.json({ error: 'Gambar tidak ada' }, { status: 404 })
 
   const buffer = await r2Download(path)

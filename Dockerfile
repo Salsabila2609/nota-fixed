@@ -8,6 +8,10 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# [BARU] naikkan heap limit Node supaya type-check Next.js tidak OOM
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 RUN npm run build
 
 FROM node:20-alpine AS runner

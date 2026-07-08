@@ -581,11 +581,12 @@ export default function DriverPage() {
   const cameraRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    fetch('/api/auth/me').then(r => r.json()).then(data => {
-      if (!data.user) { router.replace('/'); return }
-      if (data.user.role === 'admin') { router.replace('/admin'); return }
-      setUser(data.user)
-    })
+      fetch('/api/auth/me').then(r => r.json()).then(data => {
+        if (!data.user) { router.replace('/'); return }
+        if (data.user.role === 'admin') { router.replace('/admin'); return }
+        if (data.user.role === 'cse') { router.replace('/cse'); return }
+        setUser(data.user)
+      })
   }, [])
 
   useEffect(() => { if (user) fetchSubmissions() }, [user])

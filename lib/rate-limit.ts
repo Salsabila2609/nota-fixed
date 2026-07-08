@@ -1,11 +1,3 @@
-// Simple in-memory rate limiter.
-//
-// NOTE: This is per-process state. It works correctly for a single
-// container deployment (which is what the provided docker-compose.yml
-// runs). If this app is ever scaled to multiple instances behind a load
-// balancer, replace this with a shared store (Redis, Upstash, etc.) since
-// each instance would otherwise track its own independent counters.
-
 type Bucket = {
   count: number
   resetAt: number

@@ -33,10 +33,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Parameter tidak lengkap' }, { status: 400 })
     }
 
-    // PERUBAHAN #1: Concurrency control dengan p-limit
-    // Batasi 8 concurrent download dari R2 sekaligus.
-    // Tanpa ini, 500+ Promise.all langsung = spike memori + thread starvation.
-    // Angka 8 adalah sweet spot: cukup paralel, tidak overwhelm R2 atau RAM.
     const downloadLimit = pLimit(8)
 
     async function fetchDriverData(drvId: string) {
@@ -44,6 +40,7 @@ export async function POST(req: NextRequest) {
         .from('submissions')
         .select('*')
         .eq('driver_id', drvId)
+        .is('archived_at', null)      
         .order('bill_date', { ascending: true })
         .order('created_at', { ascending: true })
 
@@ -64,31 +61,22 @@ export async function POST(req: NextRequest) {
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       })
 
-      // PERUBAHAN #1 (lanjutan): Setiap download dibungkus dalam downloadLimit().
-      // Efeknya: maks 8 download berjalan bersamaan, sisanya antri otomatis.
-      // Setelah salah satu selesai, antrian berikutnya langsung masuk.
       const withImages = await Promise.all(
         sorted.map((sub) =>
           downloadLimit(async () => {
             const result: Record<string, any> = { ...sub }
 
-            // PERUBAHAN #2: Tidak ada lagi detectBlur() di sini.
-            // Blur check sudah dilakukan saat user upload foto (di upload handler).
-            // Gambar yang ada di R2 dijamin sudah lolos validasi.
-            // Memanggil detectBlur() per-gambar di sini sebelumnya = +0.5-1 detik per gambar.
-
             if (sub.image_path) {
               try {
                 result.imageData = await r2Download(sub.image_path)
               } catch {
-                // Biarkan slot kosong — pdf-generator akan tampilkan placeholder
               }
             }
 
-            // Download proof image hanya untuk nota > 250rb yang punya path
-            if (sub.proof_image_path && (sub.amount ?? 0) > 250_000) {
+            // Foto timestamp (cse) — selalu di-download kalau ada, gak digantung threshold
+            if (sub.marking_image_path) {
               try {
-                result.proofImageData = await r2Download(sub.proof_image_path)
+                result.markingImageData = await r2Download(sub.marking_image_path)
               } catch {}
             }
 
@@ -114,10 +102,7 @@ export async function POST(req: NextRequest) {
       approvedByTitle: approved_by_title,
     }
 
-    // Mode gabung: driver_ids array
     if (driver_ids && Array.isArray(driver_ids) && driver_ids.length > 0) {
-      // Fetch semua driver secara paralel (level driver, bukan level gambar)
-      // Level gambar sudah dikontrol oleh downloadLimit di dalam fetchDriverData
       const driversData = (
         await Promise.all(driver_ids.map(fetchDriverData))
       ).filter(Boolean) as { id: string; name: string; submissions: any[] }[]
@@ -145,7 +130,6 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Mode single driver
     if (!driver_id) {
       return NextResponse.json(
         { error: 'driver_id atau driver_ids wajib diisi' },

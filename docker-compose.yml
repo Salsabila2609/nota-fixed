@@ -11,8 +11,6 @@ services:
       - .env.local
     environment:
       - NODE_ENV=production
-    volumes:
-      - ./lib/google-credentials.json:/app/lib/google-credentials.json:ro
     mem_limit: 1g
     mem_reservation: 512m
 

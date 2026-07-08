@@ -13,7 +13,8 @@ export async function PATCH(
   const { id } = await params
   const body = await req.json()
 
-  if (session.role === 'driver') {
+  // 'driver' & 'cse' cuma boleh edit punya sendiri, dan hanya saat pending
+  if (session.role !== 'admin') {
     const { data: sub } = await supabaseAdmin
       .from('submissions')
       .select('driver_id, status')
@@ -76,18 +77,19 @@ export async function DELETE(
 
   const { data: sub } = await supabaseAdmin
     .from('submissions')
-    .select('driver_id, image_path, proof_image_path')
+    .select('driver_id, image_path, marking_image_path, proof_image_path')
     .eq('id', id)
     .single()
 
   if (!sub) return NextResponse.json({ error: 'Tidak ditemukan' }, { status: 404 })
 
-  if (session.role === 'driver' && sub.driver_id !== session.id) {
+  if (session.role !== 'admin' && sub.driver_id !== session.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   // Hapus gambar dari R2
   if (sub.image_path) await r2Delete(sub.image_path)
+  if (sub.marking_image_path) await r2Delete(sub.marking_image_path)
   if (sub.proof_image_path) await r2Delete(sub.proof_image_path)
 
   const { error } = await supabaseAdmin.from('submissions').delete().eq('id', id)

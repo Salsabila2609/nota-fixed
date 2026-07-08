@@ -32,14 +32,15 @@ type EditData = {
 
 type Props = {
   submission: any
-  onClose: (savedAmount?: number) => void   // ← bawa amount kalau baru >250rb
+  onClose: (savedAmount?: number) => void
   onSave: (id: string, data: any) => Promise<void>
   isAdmin?: boolean
+  lockedCategory?: string   
 }
 
-export default function EditModal({ submission, onClose, onSave, isAdmin = false }: Props) {
+export default function EditModal({ submission, onClose, onSave, isAdmin = false, lockedCategory }: Props) {
   const [form, setForm] = useState<EditData>({
-    category: submission.category || 'lainnya',
+    category: lockedCategory || submission.category || 'lainnya',  // [BARU] paksa locked value
     amount: submission.amount ? String(submission.amount) : '',
     description: submission.description || '',
     submission_date: submission.submission_date || '',
@@ -57,7 +58,7 @@ export default function EditModal({ submission, onClose, onSave, isAdmin = false
     try {
       const newAmount = form.amount ? parseFloat(form.amount) : null
       const updates: any = {
-        category: form.category,
+        category: lockedCategory || form.category,
         amount: newAmount,
         bill_date: form.bill_date || null,
         description: isLainnya ? (form.description || null) : null,
@@ -178,14 +179,23 @@ export default function EditModal({ submission, onClose, onSave, isAdmin = false
             {/* Kategori */}
             <div>
               <label style={labelStyle}>Kategori</label>
-              <select
-                className="edit-modal-input"
-                value={form.category}
-                onChange={e => setForm({ ...form, category: e.target.value })}
-                style={inputBase}
-              >
-                {CATEGORY_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
+              {lockedCategory ? (
+                <div style={{
+                  ...inputBase, display: 'flex', alignItems: 'center',
+                  background: '#F8F8FA', color: IOH.charcoal, cursor: 'not-allowed',
+                }}>
+                  {CATEGORY_OPTIONS.find(c => c.value === lockedCategory)?.label || lockedCategory}
+                </div>
+              ) : (
+                <select
+                  className="edit-modal-input"
+                  value={form.category}
+                  onChange={e => setForm({ ...form, category: e.target.value })}
+                  style={inputBase}
+                >
+                  {CATEGORY_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+              )}
             </div>
 
             {/* Nominal */}

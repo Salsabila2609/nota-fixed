@@ -10,7 +10,7 @@ export type SessionUser = {
   id: string
   name: string
   username: string
-  role: 'driver' | 'admin'
+  role: 'driver' | 'admin' | 'cse'
 }
 
 export async function createSession(user: SessionUser): Promise<string> {
