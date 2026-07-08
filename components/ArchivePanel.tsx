@@ -140,12 +140,12 @@ export default function ArchivePanel({ branches, cseUsers }: { branches: Branch[
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#000000', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Bulan (tgl struk)</label>
             <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${IOH.border}`, fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif" }} />
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${IOH.border}`, fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", color: '#111', background: IOH.white }} />
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#000000', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Branch</label>
             <select value={selectedBranch} onChange={e => { setSelectedBranch(e.target.value); setSelectedCse('all') }}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${IOH.border}`, fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${IOH.border}`, fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", color: '#111', background: IOH.white }} >
               <option value="all">Semua Branch</option>
               {branches.map(b => <option key={b.id} value={b.id}>{b.name} ({b.brand})</option>)}
             </select>
@@ -153,7 +153,7 @@ export default function ArchivePanel({ branches, cseUsers }: { branches: Branch[
           <div>
             <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#000000', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>CSE</label>
             <select value={selectedCse} onChange={e => setSelectedCse(e.target.value)}
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${IOH.border}`, fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              style={{ width: '100%', padding: '9px 12px', borderRadius: 10, border: `1.5px solid ${IOH.border}`, fontSize: 14, fontFamily: "'Plus Jakarta Sans', sans-serif", color: '#111', background: IOH.white }}>
               <option value="all">Semua CSE</option>
               {cseUsers.filter(u => selectedBranch === 'all' || u.branch_id === selectedBranch).map(u => (
                 <option key={u.id} value={u.id}>{u.mc_name || u.name}</option>
