@@ -385,9 +385,8 @@ export default function UserManagementPanel({ currentUserId, roleFilter }: { cur
           )}
           <button onClick={() => setShowAdd(true)} style={{
             display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 11, border: 'none',
-            background: `linear-gradient(135deg, ${IOH.red}, ${IOH.magenta})`, color: '#fff',
+            background: `linear-gradient(135deg, ${IOH.yellow}, ${IOH.yellow})`, color: '#fff',
             fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
-            boxShadow: '0 4px 14px rgba(237,28,36,0.3)',
           }}>
             <UserPlus size={15} /> Tambah User
           </button>
