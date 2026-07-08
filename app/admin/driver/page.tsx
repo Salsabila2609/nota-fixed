@@ -120,6 +120,11 @@ export default function AdminDriverPage() {
   const pageStart = (safePage - 1) * pageSize
   const paginated = filtered.slice(pageStart, pageStart + pageSize)
 
+  const tabs = [
+    { key: 'submissions' as const, label: '📋 Nota Aktif' },
+    { key: 'users' as const, label: '👥 User' },
+  ]
+
   if (!user) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
@@ -135,7 +140,7 @@ export default function AdminDriverPage() {
 
         {/* ── FILTER CARD (khusus Driver) ── */}
         <div style={{ background: IOH.white, borderRadius: 16, padding: isMobile ? '14px 14px' : 22, marginBottom: 16, boxShadow: '0 1px 6px rgba(0,0,0,0.06)', border: `1px solid ${IOH.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: isMobile && !filterOpen ? 0 : 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: isMobile && !filterOpen ? 10 : 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 26, height: 26, borderRadius: 7, background: IOH.red + '15', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <SlidersHorizontal size={13} color={IOH.red} />
@@ -143,7 +148,7 @@ export default function AdminDriverPage() {
               <span style={{ fontSize: 12, fontWeight: 700, color: '#333', letterSpacing: '0.07em', textTransform: 'uppercase' }}>Filter Driver</span>
             </div>
             {isMobile && (
-              <button onClick={() => setFilterOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 8, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#666', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+              <button onClick={() => setFilterOpen(v => !v)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 11px', borderRadius: 8, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: 'pointer', fontSize: 11, fontWeight: 700, color: '#666', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                 <Filter size={11} color="#666" />
                 {filterOpen ? 'Tutup' : 'Filter'}
                 <ChevronDown size={11} color="#999" style={{ transform: filterOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
@@ -152,32 +157,32 @@ export default function AdminDriverPage() {
           </div>
 
           {isMobile && (
-            <div style={{ position: 'relative', marginBottom: filterOpen ? 12 : 0 }}>
+            <div style={{ position: 'relative', marginBottom: filterOpen ? 14 : 2 }}>
               <Search size={13} color="#bbb" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
-              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Cari nama, kategori..." style={{ ...inputStyle, paddingLeft: 32, fontSize: 14 }} />
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Cari nama, kategori..." style={{ ...inputStyle, paddingLeft: 32, paddingTop: 11, paddingBottom: 11, fontSize: 14 }} />
             </div>
           )}
 
           {(!isMobile || filterOpen) && (
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? 10 : 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(160px, 1fr))', gap: isMobile ? 12 : 14 }}>
               <div style={{ gridColumn: isMobile ? '1 / -1' : undefined }}>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Driver</label>
-                <select value={selectedDriver} onChange={e => setSelectedDriver(e.target.value)} style={{ ...inputStyle, fontSize: 14 }}>
+                <select value={selectedDriver} onChange={e => setSelectedDriver(e.target.value)} style={{ ...inputStyle, fontSize: 14, padding: isMobile ? '10px 10px' : '9px 12px' }}>
                   <option value="all">Semua Driver</option>
                   {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dari</label>
-                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ ...inputStyle, fontSize: 14 }} />
+                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ ...inputStyle, fontSize: 14, padding: isMobile ? '10px 8px' : '9px 12px' }} />
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Sampai</label>
-                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ ...inputStyle, fontSize: 14 }} />
+                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ ...inputStyle, fontSize: 14, padding: isMobile ? '10px 8px' : '9px 12px' }} />
               </div>
               <div style={{ gridColumn: isMobile ? '1 / -1' : undefined }}>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nama Perusahaan</label>
-                <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="PT. Indosat Tbk" style={{ ...inputStyle, fontSize: 14 }} />
+                <input type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="PT. Indosat Tbk" style={{ ...inputStyle, fontSize: 14, padding: isMobile ? '10px 10px' : '9px 12px' }} />
               </div>
               {!isMobile && (
                 <div>
@@ -193,15 +198,13 @@ export default function AdminDriverPage() {
         </div>
 
         {/* ── TOOLBAR: view mode + export (khusus Driver) ── */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
-          <div style={{ display: 'flex', gap: 4, background: IOH.white, borderRadius: 12, padding: 4, border: `1px solid ${IOH.border}`, width: 'fit-content', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
-            {([
-              { key: 'submissions', label: '📋 Nota Aktif' },
-              { key: 'users', label: '👥 User' },
-            ] as const).map(tab => (
+        <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', justifyContent: 'space-between', gap: 10, marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 4, background: IOH.white, borderRadius: 12, padding: 4, border: `1px solid ${IOH.border}`, width: isMobile ? '100%' : 'fit-content', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' }}>
+            {tabs.map(tab => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
-                padding: '8px 18px', borderRadius: 9, border: 'none', cursor: 'pointer',
-                fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: 12, fontWeight: 700,
+                flex: isMobile ? 1 : undefined,
+                padding: isMobile ? '8px 6px' : '8px 18px', borderRadius: 9, border: 'none', cursor: 'pointer',
+                fontFamily: "'Plus Jakarta Sans', sans-serif", fontSize: isMobile ? 11 : 12, fontWeight: 700,
                 background: activeTab === tab.key ? IOH.red : 'transparent',
                 color: activeTab === tab.key ? '#fff' : '#aaa', transition: 'all 0.15s',
               }}>
@@ -211,21 +214,23 @@ export default function AdminDriverPage() {
           </div>
 
           {activeTab === 'submissions' && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{ display: 'flex', borderRadius: 8, border: `1.5px solid ${IOH.border}`, overflow: 'hidden' }}>
-                <button onClick={() => setViewMode('list')} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 12px', border: 'none', background: viewMode === 'list' ? IOH.red : IOH.white, color: viewMode === 'list' ? '#fff' : IOH.charcoal, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: isMobile ? '100%' : undefined }}>
+              <div style={{ display: 'flex', borderRadius: 8, border: `1.5px solid ${IOH.border}`, overflow: 'hidden', flex: isMobile ? 1 : undefined }}>
+                <button onClick={() => setViewMode('list')} style={{ flex: isMobile ? 1 : undefined, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: isMobile ? '8px 0' : '7px 12px', border: 'none', background: viewMode === 'list' ? IOH.red : IOH.white, color: viewMode === 'list' ? '#fff' : IOH.charcoal, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   <List size={13} /> List
                 </button>
-                <button onClick={() => setViewMode('grid')} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '7px 12px', border: 'none', borderLeft: `1px solid ${IOH.border}`, background: viewMode === 'grid' ? IOH.red : IOH.white, color: viewMode === 'grid' ? '#fff' : IOH.charcoal, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                <button onClick={() => setViewMode('grid')} style={{ flex: isMobile ? 1 : undefined, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: isMobile ? '8px 0' : '7px 12px', border: 'none', borderLeft: `1px solid ${IOH.border}`, background: viewMode === 'grid' ? IOH.red : IOH.white, color: viewMode === 'grid' ? '#fff' : IOH.charcoal, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
                   <LayoutGrid size={13} /> Grid
                 </button>
               </div>
-              <ExportExcelButton
-                allDrivers={drivers}
-                defaultMonth={dateFrom.slice(0, 7)}
-                companyName={companyName}
-                onArchiveDone={fetchSubmissions}
-              />
+              <div style={{ flexShrink: 0 }}>
+                <ExportExcelButton
+                  allDrivers={drivers}
+                  defaultMonth={dateFrom.slice(0, 7)}
+                  companyName={companyName}
+                  onArchiveDone={fetchSubmissions}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -237,7 +242,7 @@ export default function AdminDriverPage() {
           <>
             <AdminUploadSection drivers={drivers} onUploadDone={fetchSubmissions} />
 
-            <div style={{ display: 'grid', gridTemplateColumns: flaggedCount > 0 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: isMobile ? 10 : 14, marginBottom: isMobile ? 14 : 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : flaggedCount > 0 ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: isMobile ? 10 : 14, marginBottom: isMobile ? 14 : 20 }}>
               <StatCard label="Total Nota" value={filtered.length} accent={IOH.yellow} />
               <StatCard label="Total Nilai" value={`Rp ${formatAmount(totalAmount)}`} accent={IOH.red} />
               {!isMobile && <StatCard label="Driver Aktif" value={Object.keys(driverGroups).length} accent={IOH.teal} />}
