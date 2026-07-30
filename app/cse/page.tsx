@@ -959,7 +959,7 @@ export default function csePage() {
             </div>
 
             {/* Hidden input dipakai bareng buat semua tombol "tambah foto timestamp" */}
-            <input ref={markingRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleMarkingFileChange} />
+            <input ref={markingRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleMarkingFileChange} />
 
             {files.length > 0 && (
               <>

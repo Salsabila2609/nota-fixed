@@ -26,7 +26,6 @@ export type CSEBranchExcelParams = {
   reportDate?: string
 }
 
-const HIGH_VALUE_THRESHOLD = 250000
 const FONT_NAME = 'Arial'
 
 const COLOR = {
@@ -74,11 +73,6 @@ function itemLabel(category: string, description?: string | null): string {
   if (c.includes('parkir')) return 'Parkir'
   if (c === 'lainnya') return description ? description : 'Lainnya'
   return category
-}
-
-function detectExt(data: Uint8Array): 'jpeg' | 'png' {
-  if (data.length > 4 && data[0] === 0x89 && data[1] === 0x50) return 'png'
-  return 'jpeg'
 }
 
 // ─── Signature block (dipakai di Rekap & Disposisi) ───────────────────────
@@ -167,7 +161,7 @@ function buildRekapSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams) {
   setCell(ws, 3, 2, proposalTitle ? `Proposal ${proposalTitle}` : 'Proposal ', { font: { size: 10, name: FONT_NAME } })
   setCell(ws, 4, 2, 'Periode', { font: { size: 10, name: FONT_NAME } })
   setCell(ws, 4, 4, `: ${fmtExcelDate(dateRange.from)} - ${fmtExcelDate(dateRange.to)}`, { font: { size: 10, name: FONT_NAME } })
-  setCell(ws, 5, 2, 'Regional', { font: { size: 10, name: FONT_NAME } })
+  setCell(ws, 5, 2, 'Branch', { font: { size: 10, name: FONT_NAME } })
   setCell(ws, 5, 4, `: ${branchName}`, { font: { size: 10, name: FONT_NAME } })
   if (subtitle) setCell(ws, 5, 8, subtitle, { font: { size: 9, italic: true, name: FONT_NAME, color: { argb: 'FF888888' } } })
 
@@ -272,81 +266,9 @@ function buildRekapSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams) {
   }
 }
 
-// ─── Sheet 2: Nota & dokumentasi ───────────────────────────────────────────
-// (tidak berubah — urutan rows tetap sama seperti yang diterima)
-
-const IMG_ROW_HEIGHT = 202.5
-const IMG_ROW_HEIGHT_PX = Math.round(IMG_ROW_HEIGHT * 96 / 72)
-const CELL_C_WIDTH_PX = 330
-const CELL_D_WIDTH_PX = 220
-
-function addImageStacked(
-  wb: ExcelJS.Workbook, ws: ExcelJS.Worksheet,
-  rowIdx0: number, colIdx0: number,
-  images: { data: Uint8Array; label: string }[],
-  cellWidthPx: number,
-) {
-  if (images.length === 0) return
-  const slotH = IMG_ROW_HEIGHT_PX / images.length
-  images.forEach((img, i) => {
-    try {
-      const imageId = wb.addImage({ buffer: img.data as any, extension: detectExt(img.data) })
-      const targetH = slotH - 6
-      const targetW = cellWidthPx - 10
-      ws.addImage(imageId, {
-        tl: { col: colIdx0 + 0.05, row: rowIdx0 + (i * slotH) / IMG_ROW_HEIGHT_PX + 0.02 } as any,
-        ext: { width: targetW, height: targetH },
-      })
-    } catch {
-      // gambar gagal di-embed — biarkan sel kosong daripada bikin seluruh export gagal
-    }
-  })
-}
-
-function buildNotaDokumentasiSheet(wb: ExcelJS.Workbook, rows: CSEReportRow[]) {
-  const ws = wb.addWorksheet('Nota & dokumentasi', {
-    pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1 },
-  })
-
-  ws.getColumn(2).width = 6
-  ws.getColumn(3).width = 47.26
-  ws.getColumn(4).width = 30
-
-  setCell(ws, 2, 2, 'note: jika nota lebih dari 250k, wajib melampirkan bukti transfer/edc/qris', {
-    font: { size: 9, italic: true, name: FONT_NAME, color: { argb: 'FFB45309' } },
-  })
-  setCell(ws, 3, 2, 'nota wajib urut sesuai nomor di tabel', {
-    font: { size: 9, italic: true, name: FONT_NAME, color: { argb: 'FF888888' } },
-  })
-
-  const hdrRow = 4
-  setCell(ws, hdrRow, 2, 'No', { font: { bold: true, size: 9, name: FONT_NAME, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.headerBg } }, alignment: centerAlign(), border: border() })
-  setCell(ws, hdrRow, 3, 'Nota dan bukti transfer/edc/qris', { font: { bold: true, size: 9, name: FONT_NAME, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.headerBg } }, alignment: centerAlign(), border: border() })
-  setCell(ws, hdrRow, 4, 'Dokumentasi', { font: { bold: true, size: 9, name: FONT_NAME, color: { argb: 'FFFFFFFF' } }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.headerBg } }, alignment: centerAlign(), border: border() })
-
-  let r = hdrRow + 1
-  for (const row of rows) {
-    ws.getRow(r).height = IMG_ROW_HEIGHT
-    setCell(ws, r, 2, row.no, { font: { size: 9, name: FONT_NAME }, alignment: centerAlign(), border: border() })
-    setCell(ws, r, 3, '', { border: border() })
-    setCell(ws, r, 4, '', { border: border() })
-
-    const notaImages: { data: Uint8Array; label: string }[] = []
-    if (row.imageData) notaImages.push({ data: row.imageData, label: 'Nota' })
-    if ((row.amount || 0) > HIGH_VALUE_THRESHOLD && row.proofImageData) {
-      notaImages.push({ data: row.proofImageData, label: 'Bukti Transfer' })
-    }
-    addImageStacked(wb, ws, r - 1, 2, notaImages, CELL_C_WIDTH_PX)
-
-    if (row.markingImageData) {
-      addImageStacked(wb, ws, r - 1, 3, [{ data: row.markingImageData, label: 'Dokumentasi' }], CELL_D_WIDTH_PX)
-    }
-
-    r++
-  }
-}
-
-// ─── Sheet 3: Disposisi ────────────────────────────────────────────────────
+// ─── Sheet 2: Disposisi ────────────────────────────────────────────────────
+// [HAPUS] Sheet "Nota & dokumentasi" sudah dihapus atas permintaan —
+// sekarang workbook cuma berisi 2 sheet: "Rekap settlement" & "Disposisi".
 
 function buildDisposisiSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams) {
   const ws = wb.addWorksheet('Disposisi', {
@@ -391,22 +313,13 @@ export async function generateCSEBranchExcel(params: CSEBranchExcelParams): Prom
   workbook.created = new Date()
 
   buildRekapSheet(workbook, params)
-  buildNotaDokumentasiSheet(workbook, params.rows)
   buildDisposisiSheet(workbook, params)
 
   const buffer = await workbook.xlsx.writeBuffer()
   return Buffer.from(buffer)
 }
 
-/**
- * [BARU] Nomor urut sekarang RESTART per CSE (bukan lanjut 1..N terus),
- * supaya nomor #1 CSE X di Excel = nomor #1 CSE X di PDF.
- *
- * PENTING: kalau ada file PDF generator CSE terpisah (mis. lib/cse-pdf-generator.ts),
- * pastikan fungsi penomorannya di sana JUGA di-update pakai logika yang sama
- * (sort by cseName lalu date, nomor restart tiap ganti cseName) — supaya
- * benar-benar konsisten antara PDF dan Excel seperti yang diminta.
- */
+
 export function prepareCSEReportRows(
   submissions: Array<{
     driver_name: string

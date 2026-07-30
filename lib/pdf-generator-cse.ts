@@ -273,7 +273,7 @@ function drawRecapPages(
         x: MG, y, font: reg, size: 9, color: C.charcoal,
       })
       y -= 16
-      page.drawText(`Regional : ${ctx.branchName}`, { x: MG, y, font: reg, size: 9, color: C.charcoal })
+      page.drawText(`Branch : ${ctx.branchName}`, { x: MG, y, font: reg, size: 9, color: C.charcoal })
       y -= 24
     }
 

@@ -16,9 +16,10 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
+  const cseIdFilter = searchParams.get('cse_id')
   const driverFilter = searchParams.get('driver_id')
   const branchFilter = searchParams.get('branch_id')
-  const roleFilter = searchParams.get('role') 
+  const roleFilter = searchParams.get('role')
   const dateFrom = searchParams.get('from')
   const dateTo = searchParams.get('to')
   const billFrom = searchParams.get('bill_from')   
@@ -34,6 +35,9 @@ export async function GET(req: NextRequest) {
   // 'driver' dan 'cse' cuma boleh lihat punya sendiri; admin bebas / bisa filter
   if (session.role !== 'admin') {
     query = query.eq('driver_id', session.id)
+  } else if (cseIdFilter) {
+    // 1 CSE spesifik
+    query = query.eq('driver_id', cseIdFilter)
   } else if (driverFilter) {
     // 1 orang spesifik — bisa driver, bisa cse
     query = query.eq('driver_id', driverFilter)

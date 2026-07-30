@@ -127,7 +127,7 @@ export default function LoginPage() {
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: '#111', lineHeight: 1 }}>Reimburse</div>
                 <div style={{ fontSize: 10, color: IOH.red, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 2 }}>
-                  Driver Portal
+                  Portal
                 </div>
               </div>
             </div>
