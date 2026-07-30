@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { createSession } from '@/lib/auth'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
@@ -9,6 +9,7 @@ const ATTEMPTS_PER_IP = 20
 const WINDOW_MS = 60 * 1000
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   try {
     const { username, password } = await req.json()
 

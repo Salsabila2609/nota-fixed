@@ -1,26 +1,36 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-// Fail loudly at boot instead of silently falling back to placeholders that
-// would make every Supabase call fail with a confusing runtime error.
+// NEXT_PUBLIC_* aman divalidasi di module scope karena memang harus ada
+// saat build (di-inline ke bundle client).
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
     'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY env vars'
   )
 }
 
-if (!supabaseServiceKey) {
-  throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY env var')
-}
-
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { autoRefreshToken: false, persistSession: false }
-})
+// Lazy-init: service role key adalah secret runtime, sengaja TIDAK dibaca
+// di module scope supaya `next build` / collect-page-data tidak gagal
+// hanya karena env belum tersedia di build stage Docker.
+let _supabaseAdmin: SupabaseClient | null = null
+
+export function getSupabaseAdmin(): SupabaseClient {
+  if (_supabaseAdmin) return _supabaseAdmin
+
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseServiceKey) {
+    throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY env var')
+  }
+
+  _supabaseAdmin = createClient(supabaseUrl!, supabaseServiceKey, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  })
+  return _supabaseAdmin
+}
 
 // NOTE: role 'cse' sudah dimigrasikan menjadi 'cse' (lihat migration_cse_branch.sql).
 // CSE = Customer Service Executive, ditempatkan di 1 branch, memegang 1 nama MC.

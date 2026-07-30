@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { getSessionFromRequest } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 const VALID_ROLES = ['driver', 'admin', 'cse']
 
 export async function GET(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
   if (!session || session.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -21,6 +22,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
   if (!session || session.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })

@@ -9,6 +9,13 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# [BARU] terima env publik saat build, karena Next.js meng-inline
+# NEXT_PUBLIC_* ke bundle client pada saat build, bukan runtime
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
+ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
+
 # [BARU] naikkan heap limit Node supaya type-check Next.js tidak OOM
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 

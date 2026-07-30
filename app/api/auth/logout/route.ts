@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
 
   if (session) {

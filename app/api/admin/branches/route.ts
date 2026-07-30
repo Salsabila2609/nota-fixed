@@ -1,7 +1,7 @@
 // Letakkan di: app/api/admin/branches/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 
 async function requireAdmin(req: NextRequest) {
   const session = await getSessionFromRequest(req)
@@ -10,6 +10,7 @@ async function requireAdmin(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await requireAdmin(req)
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -24,6 +25,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await requireAdmin(req)
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
@@ -44,6 +46,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await requireAdmin(req)
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 

@@ -1,0 +1,22 @@
+# secrets — jangan pernah masuk build context
+.env
+.env.local
+.env*.local
+.env.*.local
+
+# dependency & build artifacts
+node_modules
+.next
+npm-debug.log*
+
+# git & editor
+.git
+.gitignore
+.dockerignore
+.vscode
+.idea
+
+# docs & misc yang gak perlu buat build
+README.md
+*.md
+.DS_Store

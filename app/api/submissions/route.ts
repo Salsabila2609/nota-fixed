@@ -1,7 +1,7 @@
 export const maxDuration = 60
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { processReceiptImage } from '@/lib/image-processing'
 import { r2Upload, r2SignedUrl, r2Delete } from '@/lib/r2'
 import { v4 as uuidv4 } from 'uuid'
@@ -12,6 +12,7 @@ import { buildReceiptFolder, monthKeyFrom } from '@/lib/storage-paths'
 const NO_MATCH_ID = '00000000-0000-0000-0000-000000000000'
 
 export async function GET(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -118,6 +119,7 @@ function sortImageKeys(keys: string[]): string[] {
 }
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pLimit from 'p-limit'
 import { getSessionFromRequest } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { generateReimbursementPDF } from '@/lib/pdf-generator'
 import { r2Download } from '@/lib/r2'
 
 export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
   if (!session || session.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden - Admin only' }, { status: 403 })

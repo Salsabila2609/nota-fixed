@@ -25,7 +25,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import {
   generateRekapExcel,
   type DriverData,
@@ -33,6 +33,7 @@ import {
 } from '@/lib/excel-generator'
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   // ── Auth: admin only ───────────────────────────────────────────────────────
   const session = await getSessionFromRequest(req)
   if (!session || session.role !== 'admin') {

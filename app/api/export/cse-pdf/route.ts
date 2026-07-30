@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import pLimit from 'p-limit'
 import { getSessionFromRequest } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
 import { generateCSEBranchPDF, CSESubmission } from '@/lib/pdf-generator-cse'
 import { r2Download } from '@/lib/r2'
 
 export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   // [BARU] admin bebas export branch mana saja; CSE cuma boleh export branch-nya sendiri

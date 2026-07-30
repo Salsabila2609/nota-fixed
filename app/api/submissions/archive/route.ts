@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
-import { supabaseAdmin } from '@/lib/supabase'
+import { getSupabaseAdmin } from '@/lib/supabase'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
-async function resolveDriverIdsByRole(opts: { role?: string; branch_id?: string; cse_id?: string }): Promise<string[] | null> {
+async function resolveDriverIdsByRole(
+  supabaseAdmin: SupabaseClient,
+  opts: { role?: string; branch_id?: string; cse_id?: string }
+): Promise<string[] | null> {
   const { role, branch_id, cse_id } = opts
   if (!role && !branch_id && !cse_id) return null
 
@@ -19,6 +23,7 @@ async function resolveDriverIdsByRole(opts: { role?: string; branch_id?: string;
 }
 
 export async function POST(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (session.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -32,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     if (!driverIds) {
       try {
-        driverIds = await resolveDriverIdsByRole({ role: body.role, branch_id: body.branch_id, cse_id: body.cse_id })
+        driverIds = await resolveDriverIdsByRole(supabaseAdmin, { role: body.role, branch_id: body.branch_id, cse_id: body.cse_id })
       } catch (e: any) {
         return NextResponse.json({ error: e.message }, { status: 500 })
       }
@@ -60,6 +65,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (session.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -75,7 +81,7 @@ export async function GET(req: NextRequest) {
   let driverIds: string[] | null = null
   if (role || branchId || cseId) {
     try {
-      driverIds = await resolveDriverIdsByRole({ role, branch_id: branchId, cse_id: cseId })
+      driverIds = await resolveDriverIdsByRole(supabaseAdmin, { role, branch_id: branchId, cse_id: cseId })
     } catch (e: any) {
       return NextResponse.json({ error: e.message }, { status: 500 })
     }
@@ -100,6 +106,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (session.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -124,7 +131,7 @@ export async function DELETE(req: NextRequest) {
       // [BARU] fallback role/branch_id/cse_id kalau driver_ids tidak dikirim (untuk konsistensi, walau ArchivePanel/ExportButton saat ini selalu kirim `ids` eksplisit)
       if (!driverIds && (body.role || body.branch_id || body.cse_id)) {
         try {
-          driverIds = await resolveDriverIdsByRole({ role: body.role, branch_id: body.branch_id, cse_id: body.cse_id })
+          driverIds = await resolveDriverIdsByRole(supabaseAdmin, { role: body.role, branch_id: body.branch_id, cse_id: body.cse_id })
         } catch (e: any) {
           return NextResponse.json({ error: e.message }, { status: 500 })
         }
