@@ -18,6 +18,7 @@ import {
 } from '@/components/admin/AdminShared'
 
 type Driver = { id: string; name: string; email: string }
+type DateFilterMode = 'bill' | 'submission'
 
 export default function AdminDriverPage() {
   const [activeTab, setActiveTab] = useState<'submissions' | 'users'>('submissions')
@@ -29,6 +30,7 @@ export default function AdminDriverPage() {
   const [selectedDriver, setSelectedDriver] = useState<string>('all')
   const [dateFrom, setDateFrom] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10) })
   const [dateTo, setDateTo] = useState(() => new Date().toISOString().slice(0, 10))
+  const [dateFilterMode, setDateFilterMode] = useState<DateFilterMode>('bill')
   const [loading, setLoading] = useState(true)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [lightbox, setLightbox] = useState<string | null>(null)
@@ -51,8 +53,8 @@ export default function AdminDriverPage() {
     })
   }, [])
 
-  useEffect(() => { if (user) fetchSubmissions() }, [user, selectedDriver, dateFrom, dateTo])
-  useEffect(() => { setCurrentPage(1) }, [selectedDriver, dateFrom, dateTo, searchQuery, viewMode])
+  useEffect(() => { if (user) fetchSubmissions() }, [user, selectedDriver, dateFrom, dateTo, dateFilterMode])
+  useEffect(() => { setCurrentPage(1) }, [selectedDriver, dateFrom, dateTo, dateFilterMode, searchQuery, viewMode])
 
   const fetchDrivers = async () => {
     const res = await fetch('/api/drivers')
@@ -62,7 +64,10 @@ export default function AdminDriverPage() {
 
   const fetchSubmissions = async () => {
     setLoading(true)
-    let url = `/api/submissions?from=${dateFrom}&to=${dateTo}`
+    const dateParams = dateFilterMode === 'bill'
+      ? `bill_from=${dateFrom}&bill_to=${dateTo}`
+      : `from=${dateFrom}&to=${dateTo}`
+    let url = `/api/submissions?${dateParams}`
     if (selectedDriver !== 'all') url += `&driver_id=${selectedDriver}`
     else url += `&role=driver`
     try {
@@ -170,6 +175,38 @@ export default function AdminDriverPage() {
                   {drivers.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
               </div>
+
+              <div style={{ gridColumn: isMobile ? '1 / -1' : undefined }}>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Filter Berdasarkan</label>
+                <div style={{ display: 'flex', borderRadius: 8, border: `1.5px solid ${IOH.border}`, overflow: 'hidden' }}>
+                  <button
+                    onClick={() => setDateFilterMode('bill')}
+                    style={{
+                      flex: 1, padding: isMobile ? '9px 0' : '8px 0', border: 'none',
+                      background: dateFilterMode === 'bill' ? IOH.red : IOH.white,
+                      color: dateFilterMode === 'bill' ? '#fff' : IOH.charcoal,
+                      cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                      fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s',
+                    }}
+                  >
+                    Tgl Struk
+                  </button>
+                  <button
+                    onClick={() => setDateFilterMode('submission')}
+                    style={{
+                      flex: 1, padding: isMobile ? '9px 0' : '8px 0', border: 'none',
+                      borderLeft: `1px solid ${IOH.border}`,
+                      background: dateFilterMode === 'submission' ? IOH.red : IOH.white,
+                      color: dateFilterMode === 'submission' ? '#fff' : IOH.charcoal,
+                      cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                      fontFamily: "'Plus Jakarta Sans', sans-serif", transition: 'all 0.15s',
+                    }}
+                  >
+                    Tgl Submit
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: '#999', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Dari</label>
                 <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ ...inputStyle, fontSize: 14, padding: isMobile ? '10px 8px' : '9px 12px' }} />

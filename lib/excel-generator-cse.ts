@@ -36,7 +36,7 @@ const COLOR = {
   altRow: 'FFF5F5F7',
   border: 'FFD0D0D4',
   accentYellow: 'FFFFCB05',
-  accentTeal: 'FF32BCAD', // [BARU] dipakai untuk baris "ALL" biar konsisten dgn driver
+  accentTeal: 'FF32BCAD', // dipakai untuk baris "ALL" biar konsisten dgn driver
 }
 
 function border(style: ExcelJS.BorderStyle = 'thin'): ExcelJS.Borders {
@@ -76,13 +76,9 @@ function itemLabel(category: string, description?: string | null): string {
 }
 
 // ─── Signature block (dipakai di Rekap & Disposisi) ───────────────────────
-// [BARU] Sebelumnya "Proposed by," -> (jarak 5 baris) -> "Nama" -> (jarak 5
-// baris) -> "Title" — jaraknya sama-rata dan kejauhan, gak ada kotak/border
-// buat area tanda tangan sama sekali. Sekarang:
-//   - Ada KOTAK BORDER berisi ruang kosong buat tanda tangan asli (3 baris).
-//   - "Nama" nempel tepat di bawah kotak itu (underline, jadi kelihatan
-//     seperti garis tanda tangan).
-//   - "Title" nempel tepat di bawah "Nama" (gak ada jarak jauh lagi).
+// Ada KOTAK BORDER berisi ruang kosong buat tanda tangan asli (3 baris).
+// "Nama" nempel tepat di bawah kotak itu (underline, jadi kelihatan
+// seperti garis tanda tangan). "Title" nempel tepat di bawah "Nama".
 // Mengembalikan nomor baris terakhir yang dipakai (buat elemen setelahnya).
 function buildSignatureBlock(
   ws: ExcelJS.Worksheet,
@@ -136,14 +132,21 @@ function buildSignatureBlock(
   return titleRow
 }
 
-// ─── Sheet 1: Rekap settlement ────────────────────────────────────────────
-// [BARU] Sekarang di-render per grup CSE: nomor restart tiap CSE, ada baris
-// subtotal per CSE (mirip pola driver: "SUMANTO | TOTAL | 366.500"), lalu di
-// akhir ada section "ALL" yang menjumlahkan per kategori dari SEMUA CSE.
+// ─── Sheet Rekap settlement (dipakai untuk single branch & untuk tiap
+// branch di dalam export "Semua Branch") ───────────────────────────────────
+// Di-render per grup CSE: nomor restart tiap CSE, ada baris subtotal per
+// CSE (mirip pola driver: "SUMANTO | TOTAL | 366.500"), lalu di akhir ada
+// section "ALL" yang menjumlahkan per kategori dari SEMUA CSE di branch ini.
+// `sheetName` bisa dikustom supaya function ini reusable untuk banyak sheet
+// (1 sheet per branch) dalam 1 workbook yang sama.
 
-function buildRekapSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams) {
+function buildRekapSheet(
+  wb: ExcelJS.Workbook,
+  params: CSEBranchExcelParams,
+  sheetName = 'Rekap settlement',
+) {
   const { branchName, brand, title, subtitle, proposalTitle, dateRange, rows, reportDate } = params
-  const ws = wb.addWorksheet('Rekap settlement', {
+  const ws = wb.addWorksheet(sheetName, {
     pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
   })
 
@@ -173,8 +176,8 @@ function buildRekapSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams) {
     alignment: centerAlign(), border: border(),
   }))
 
-  // [BARU] Rows sudah datang ter-sort per CSE (dari prepareCSEReportRows) dan
-  // `no` sudah di-assign restart per CSE. Di sini kita cuma perlu deteksi
+  // Rows sudah datang ter-sort per CSE (dari prepareCSEReportRows) dan `no`
+  // sudah di-assign restart per CSE. Di sini kita cuma perlu deteksi
   // pergantian grup CSE untuk menyisipkan baris subtotal.
   let r = hdrRow + 1
   let rowCounter = 0 // untuk selang-seling warna baris antar seluruh tabel
@@ -209,7 +212,7 @@ function buildRekapSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams) {
       i++
     }
 
-    // [BARU] baris subtotal per CSE — mirip pola driver "SUMANTO | TOTAL | 366.500"
+    // baris subtotal per CSE — mirip pola driver "SUMANTO | TOTAL | 366.500"
     const subStyle = {
       font: { bold: true, size: 9, name: FONT_NAME, color: { argb: COLOR.headerText } },
       fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: COLOR.totalBg } },
@@ -229,7 +232,7 @@ function buildRekapSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams) {
     r++
   }
 
-  // [BARU] Section "ALL" — jumlah per kategori dari SEMUA CSE, nomor restart dari 1
+  // Section "ALL" — jumlah per kategori dari SEMUA CSE, nomor restart dari 1
   let allNo = 1
   for (const [cat, amt] of Object.entries(grandByCategory)) {
     const bg = (rowCounter % 2 === 0) ? 'FFFFFFFF' : COLOR.altRow
@@ -257,7 +260,7 @@ function buildRekapSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams) {
   ws.mergeCells(totRow, 2, totRow, 7)
   setCell(ws, totRow, 8, grandTotal, { ...totStyle, alignment: rightAlign(), numFmt: '#,##0', font: { ...totStyle.font, color: { argb: COLOR.accentYellow } } })
 
-  // [BARU] Signature — kotak border rapi, "Nama" & "Title" nempel
+  // Signature — kotak border rapi, "Nama" & "Title" nempel
   const sigStartRow = totRow + 3
   buildSignatureBlock(ws, sigStartRow, [3, 4], [6, 7])
 
@@ -266,9 +269,9 @@ function buildRekapSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams) {
   }
 }
 
-// ─── Sheet 2: Disposisi ────────────────────────────────────────────────────
-// [HAPUS] Sheet "Nota & dokumentasi" sudah dihapus atas permintaan —
-// sekarang workbook cuma berisi 2 sheet: "Rekap settlement" & "Disposisi".
+// ─── Sheet Disposisi ────────────────────────────────────────────────────────
+// Form kosong (blank), gak perlu digandain per branch — 1 sheet cukup untuk
+// seluruh workbook, baik export single branch maupun "Semua Branch".
 
 function buildDisposisiSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams) {
   const ws = wb.addWorksheet('Disposisi', {
@@ -300,12 +303,90 @@ function buildDisposisiSheet(wb: ExcelJS.Workbook, params: CSEBranchExcelParams)
     for (let c = 2; c <= 6; c++) setCell(ws, r, c, '', { border: border() })
   }
 
-  // [BARU] Signature — pakai blok yang sama biar konsisten sama sheet Rekap
+  // Signature — pakai blok yang sama biar konsisten sama sheet Rekap
   const sigStartRow = hdrRow + 2 + 8 + 3
   buildSignatureBlock(ws, sigStartRow, [2, 3], [5, 6])
 }
 
-// ─── Main export ────────────────────────────────────────────────────────────
+// ─── Sheet Summary (khusus export "Semua Branch") ─────────────────────────
+// Halaman pertama di workbook multi-branch: 1 baris per branch berisi
+// Branch | Brand | Jumlah Nota | Total Amount, ditutup baris grand total.
+
+export type CSEAllBranchesExcelParams = {
+  title: string
+  subtitle: string
+  proposalTitle?: string
+  dateRange: { from: string; to: string }
+  branchGroups: Array<{ branchName: string; brand: 'IM3' | '3ID'; rows: CSEReportRow[] }>
+  reportDate?: string
+}
+
+function safeSheetName(base: string, used: Set<string>): string {
+  let name = base.replace(/[\\/*?:[\]]/g, '').slice(0, 31)
+  let i = 2
+  while (used.has(name)) {
+    name = `${base.slice(0, 27)} (${i})`
+    i++
+  }
+  used.add(name)
+  return name
+}
+
+function buildSummarySheet(wb: ExcelJS.Workbook, params: CSEAllBranchesExcelParams) {
+  const ws = wb.addWorksheet('Summary', {
+    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1 },
+  })
+  ws.getColumn(1).width = 3
+  ws.getColumn(2).width = 6
+  ws.getColumn(3).width = 30
+  ws.getColumn(4).width = 12
+  ws.getColumn(5).width = 14
+  ws.getColumn(6).width = 20
+
+  setCell(ws, 2, 2, params.title, { font: { bold: true, size: 13, name: FONT_NAME } })
+  setCell(ws, 3, 2, params.proposalTitle ? `Proposal ${params.proposalTitle}` : 'Proposal ', { font: { size: 10, name: FONT_NAME } })
+  setCell(ws, 4, 2, 'Periode', { font: { size: 10, name: FONT_NAME } })
+  setCell(ws, 4, 4, `: ${fmtExcelDate(params.dateRange.from)} - ${fmtExcelDate(params.dateRange.to)}`, { font: { size: 10, name: FONT_NAME } })
+  if (params.subtitle) setCell(ws, 5, 2, params.subtitle, { font: { size: 9, italic: true, name: FONT_NAME, color: { argb: 'FF888888' } } })
+
+  const hdrRow = 7
+  ;['No', 'Branch', 'Brand', 'Jumlah Nota', 'Total Amount'].forEach((h, i) => setCell(ws, hdrRow, i + 2, h, {
+    font: { bold: true, size: 9, color: { argb: COLOR.headerText }, name: FONT_NAME },
+    fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: COLOR.headerBg } },
+    alignment: centerAlign(), border: border(),
+  }))
+
+  let r = hdrRow + 1
+  let grandAmt = 0
+  let grandNota = 0
+  params.branchGroups.forEach((g, idx) => {
+    const total = g.rows.reduce((s, row) => s + row.amount, 0)
+    grandAmt += total
+    grandNota += g.rows.length
+    const bg = idx % 2 === 0 ? 'FFFFFFFF' : COLOR.altRow
+    setCell(ws, r, 2, idx + 1, { font: { size: 9, name: FONT_NAME }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }, alignment: centerAlign(), border: border() })
+    setCell(ws, r, 3, g.branchName, { font: { size: 9, name: FONT_NAME }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }, alignment: leftAlign(), border: border() })
+    setCell(ws, r, 4, g.brand, { font: { size: 9, name: FONT_NAME }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }, alignment: centerAlign(), border: border() })
+    setCell(ws, r, 5, g.rows.length, { font: { size: 9, name: FONT_NAME }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }, alignment: centerAlign(), border: border() })
+    setCell(ws, r, 6, total, { font: { size: 9, name: FONT_NAME, bold: true }, fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }, alignment: rightAlign(), border: border(), numFmt: '#,##0' })
+    r++
+  })
+
+  const totStyle = {
+    font: { bold: true, size: 10, name: FONT_NAME, color: { argb: 'FFFFFFFF' } },
+    fill: { type: 'pattern' as const, pattern: 'solid' as const, fgColor: { argb: COLOR.totalBg } },
+    border: border('medium' as ExcelJS.BorderStyle),
+  }
+  setCell(ws, r + 1, 2, `Total (${grandNota} nota)`, { ...totStyle, alignment: leftAlign() })
+  ws.mergeCells(r + 1, 2, r + 1, 5)
+  setCell(ws, r + 1, 6, grandAmt, { ...totStyle, alignment: rightAlign(), numFmt: '#,##0', font: { ...totStyle.font, color: { argb: COLOR.accentYellow } } })
+
+  if (params.reportDate) {
+    setCell(ws, 2, 8, params.reportDate, { font: { size: 8, italic: true, name: FONT_NAME, color: { argb: 'FF999999' } }, alignment: rightAlign() })
+  }
+}
+
+// ─── Main export: single branch ────────────────────────────────────────────
 
 export async function generateCSEBranchExcel(params: CSEBranchExcelParams): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook()
@@ -319,6 +400,46 @@ export async function generateCSEBranchExcel(params: CSEBranchExcelParams): Prom
   return Buffer.from(buffer)
 }
 
+// ─── Main export: semua branch sekaligus ───────────────────────────────────
+// Sheet 1 = Summary (branch-brand-amount), lalu 1 sheet Rekap per branch
+// yang punya data, ditutup 1 sheet Disposisi (form kosong, shared).
+
+export async function generateCSEAllBranchesExcel(params: CSEAllBranchesExcelParams): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook()
+  workbook.creator = 'Sistem Reimburse IOH'
+  workbook.created = new Date()
+
+  buildSummarySheet(workbook, params)
+
+  const used = new Set<string>(['Summary'])
+  for (const g of params.branchGroups) {
+    const sheetName = safeSheetName(`${g.branchName} (${g.brand})`, used)   // ⬅️ tinggal ini yg diubah
+    buildRekapSheet(workbook, {
+      branchName: g.branchName,
+      brand: g.brand,
+      title: params.title,
+      subtitle: params.subtitle,
+      proposalTitle: params.proposalTitle,
+      dateRange: params.dateRange,
+      rows: g.rows,
+      reportDate: params.reportDate,
+    }, sheetName)
+  }
+
+  buildDisposisiSheet(workbook, {
+    branchName: 'Semua Branch',
+    brand: params.branchGroups[0]?.brand ?? 'IM3',
+    title: params.title,
+    subtitle: params.subtitle,
+    dateRange: params.dateRange,
+    rows: [],
+  })
+
+  const buffer = await workbook.xlsx.writeBuffer()
+  return Buffer.from(buffer)
+}
+
+// ─── Helper: siapkan rows dari raw submissions (dipakai per-branch) ────────
 
 export function prepareCSEReportRows(
   submissions: Array<{
@@ -342,7 +463,6 @@ export function prepareCSEReportRows(
     if (byCse !== 0) return byCse
     return new Date(getDate(a)).getTime() - new Date(getDate(b)).getTime()
   })
-
 
   let currentCse: string | null = null
   let counter = 0

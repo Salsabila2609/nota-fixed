@@ -27,11 +27,14 @@ const C = {
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
+// [FIX] Untuk driver, foto tambahan yang relevan adalah BUKTI TRANSFER,
+// yang disimpan di kolom proof_image_path / field proofImageData.
+// (marking_image_path/markingImageData adalah konsep terpisah yang dipakai
+// untuk CSE — "dokumentasi" — dan untuk driver kolom ini selalu kosong.)
 type Sub = Submission & {
-  imageData?:      Uint8Array
-  proofImageData?: Uint8Array
-  markingImageData?: Uint8Array  
-  bill_date?:      string
+  imageData?:       Uint8Array
+  proofImageData?:  Uint8Array
+  bill_date?:       string
   submission_date?: string
 }
 
@@ -58,7 +61,9 @@ function buildSlots(subs: Sub[]): Slot[] {
   let n = 1
   for (const sub of subs) {
     slots.push({ type: 'nota', sub, num: n })
-    if (sub.markingImageData || sub.marking_image_path) {
+    // [FIX] cek proofImageData / proof_image_path (bukti transfer),
+    // bukan markingImageData / marking_image_path
+    if (sub.proofImageData || (sub as any).proof_image_path) {
       slots.push({ type: 'proof', sub, num: n })
     }
     n++
@@ -219,7 +224,8 @@ async function drawCell(
   const imgW = cw - IMG_PAD * 2 - 4
   const imgH = ch - LABEL_H - IMG_PAD * 2 - bannerOffset - 2
 
-  const rawData = isProof ? slot.sub.markingImageData : slot.sub.imageData
+  // [FIX] baca proofImageData untuk slot proof, bukan markingImageData
+  const rawData = isProof ? slot.sub.proofImageData : slot.sub.imageData
 
   if (rawData) {
     try {
@@ -235,8 +241,9 @@ async function drawCell(
       drawNoImage(page, imgX, imgY, imgW, imgH, reg, isProof ? 'Bukti tidak tersedia' : 'Gambar tidak tersedia')
     }
   } else {
+    // [FIX] cek proof_image_path untuk pesan fallback
     const msg = isProof
-      ? (slot.sub.marking_image_path ? 'Foto tidak ada' : 'Belum diupload')
+      ? ((slot.sub as any).proof_image_path ? 'Foto tidak ada' : 'Belum diupload')
       : 'Foto tidak ada'
     drawNoImage(page, imgX, imgY, imgW, imgH, reg, msg)
   }

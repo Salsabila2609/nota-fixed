@@ -34,58 +34,116 @@ function detectCategory(text: string): string {
   return 'lainnya'
 }
 
+/**
+ * ── extractAmount (FIXED) ──────────────────────────────────────────────
+ *
+ * Bug-bug yang diperbaiki dari versi lama:
+ *
+ *  1. Baris "Saldo"/"Sisa"/"No Seri" dulu di-skip via frasa gabungan
+ *     ("saldo awal", dst) di blok generic, sehingga baris seperti
+ *     "SALDO: Rp.93.500" atau "MANDIRI ... Saldo Rp 151.500" tetap lolos
+ *     jadi kandidat. Sekarang di-exclude keras (`continue`), bukan cuma
+ *     diturunkan prioritasnya, baik di blok tol maupun generic.
+ *
+ *  2. Tie-break lama pakai `Math.max` di antara kandidat dengan priority
+ *     SAMA. Kalau OCR gagal kenali keyword ("E-TOLL"/"Tarif" tidak
+ *     terbaca persis), baris saldo (yang angkanya hampir selalu lebih
+ *     besar dari nominal transaksi) otomatis menang di tie-break.
+ *     Sekarang begitu baris dengan keyword kuat & bukan metadata
+ *     ditemukan, langsung `return` — tidak pernah sampai ke tie-break
+ *     yang salah pilih saldo.
+ *
+ *  3. Regex lama pakai `\bRp\.?\s*(\d{1,7})\b` dan `\b(\d{3,6})\b`.
+ *     Masalahnya `\b` adalah boundary antara word-char & non-word-char,
+ *     padahal digit dan huruf SAMA-SAMA word-char. Jadi kalau OCR
+ *     menghasilkan angka nempel huruf seperti "100000Rp" atau
+ *     "10000Rp/L" (umum di struk SPBU), regex itu TIDAK PERNAH match.
+ *     Sekarang pakai lookahead/lookbehind (`(?<![\d.,])...(?![\d.,])`)
+ *     yang tahan terhadap digit nempel huruf/simbol.
+ *
+ *  4. Regex khusus tol lama mensyaratkan `\d{5,7}` BERURUTAN tanpa
+ *     separator ribuan, padahal tarif tol umumnya ditulis dengan titik
+ *     ("6.500", "12.000") — jadi hampir tidak pernah match dan diam-diam
+ *     jatuh ke generic logic yang rawan bug #1-3. Sekarang pakai
+ *     `extractNumsFromLine` yang menangani kedua format (dengan & tanpa
+ *     separator).
+ */
+
+// Regex angka yang tahan digit-nempel-huruf/simbol (mis. "100000Rp",
+// "10000Rp/L"). `\b` TIDAK bisa dipakai untuk ini karena digit dan huruf
+// sama-sama word-char, jadi \b tidak pernah "putus" di antara keduanya.
+// Pakai lookaround sebagai gantinya.
+function extractNumsFromLine(line: string, minVal = 500, maxVal = 5_000_000): number[] {
+  const out: number[] = []
+
+  // Format dengan separator ribuan: 6.500 / 12.000 / 100.000
+  const withSep = /(?<![\d.,])(\d{1,3}(?:[.,]\d{3})+)(?![\d.,])/g
+  let m
+  while ((m = withSep.exec(line)) !== null) {
+    const num = parseInt(m[1].replace(/[.,]/g, ''), 10)
+    if (num >= minVal && num <= maxVal) out.push(num)
+  }
+
+  // Format polos: 6500 / 100000 (boleh nempel huruf/simbol di sekitarnya)
+  const plain = /(?<![\d.,])(\d{3,7})(?![\d.,])/g
+  while ((m = plain.exec(line)) !== null) {
+    const num = parseInt(m[1], 10)
+    if (num >= minVal && num <= maxVal) out.push(num)
+  }
+
+  return out
+}
+
+function isDateOrTimeLine(line: string): boolean {
+  return /\d{1,2}[\/\-]\d{2}[\/\-]\d{2,4}/.test(line) || // 29/07/2026, 28-07-2026
+         /\b\d{1,2}:\d{2}(:\d{2})?\b/.test(line)          // 17:30:23, 06:06AM
+}
+
 function extractAmount(text: string, category?: string): number | null {
   const lines = text.split('\n')
 
+  // ── Kategori TOL ──────────────────────────────────────────────────────
   if (category === 'tol') {
-    const tolLinePatterns = [
-      /gol[\-\s]*\d[^\n\r]*?(\d{5,7})\s*$/i,
-      /e[\-\s]?toll[^\n\r]*?(\d{5,7})\s*$/i,
-      /tarif\s*[:\s]+[^\n\r]*?(\d{4,7})/i,
-      /debit\s*[:\s]+[^\n\r]*?(\d{4,7})/i,
-    ]
-    const tolSkip = ['cn:', 'sn:', 'sisa', 'saldo', 'kembalian']
+    // Baris yang PASTI bukan nominal transaksi tol — dibuang total,
+    // bukan sekadar diturunkan prioritasnya.
+    const tolSkip = ['cn:', 'sn:', 'sisa', 'saldo', 'kembalian', 's/n', 'no seri', 'nik']
+    const tolKeywords = ['gol', 'e-toll', 'etoll', 'e-pay', 'epay', 'tarif', 'debit']
+
     for (const line of lines) {
       const lineLower = line.toLowerCase()
       if (tolSkip.some(kw => lineLower.includes(kw))) continue
-      for (const re of tolLinePatterns) {
-        const m = line.match(re)
-        if (m) {
-          const num = parseInt(m[1].replace(/[.,]/g, ''), 10)
-          if (num >= 1000 && num <= 5_000_000) return num
-        }
-      }
+      if (isDateOrTimeLine(line)) continue
+      if (!tolKeywords.some(kw => lineLower.includes(kw))) continue
+
+      // Dulu regex ini mensyaratkan \d{5,7} BERURUTAN tanpa separator,
+      // padahal tarif tol biasa ditulis pakai titik ribuan ("6.500",
+      // "12.000") sehingga nyaris tidak pernah match.
+      const nums = extractNumsFromLine(line, 500, 5_000_000)
+      if (nums.length) return Math.max(...nums)
     }
+    // Kalau tidak ada baris dengan keyword tol yang cocok, lanjut ke
+    // generic logic di bawah sebagai fallback (bukan return null langsung).
   }
 
+  // ── Kategori BENSIN ───────────────────────────────────────────────────
   if (category === 'bensin') {
     // Prioritas 1: cari "Dibayar Konsumen" lalu ambil angka dari baris berikutnya
     for (let i = 0; i < lines.length; i++) {
       if (/dibayar\s*konsumen/i.test(lines[i])) {
-        // Cek di baris yang sama dulu
-        const sameLine = lines[i].match(/(\d{1,3}(?:[.,]\d{3})+)/)
-        if (sameLine) {
-          const num = parseInt(sameLine[1].replace(/[.,]/g, ''), 10)
-          if (num >= 10_000 && num <= 5_000_000) return num
-        }
-        // Cek 3 baris ke depan
+        const sameLineNums = extractNumsFromLine(lines[i], 10_000, 5_000_000)
+        if (sameLineNums.length) return Math.max(...sameLineNums)
         for (let j = i + 1; j <= Math.min(i + 3, lines.length - 1); j++) {
-          const cleaned = lines[j].replace(/[^\d.,]/g, ' ').trim()
-          const m = cleaned.match(/(\d{1,3}(?:[.,]\d{3})+)/)
-          if (m) {
-            const num = parseInt(m[1].replace(/[.,]/g, ''), 10)
-            if (num >= 10_000 && num <= 5_000_000) return num
-          }
+          const nums = extractNumsFromLine(lines[j], 10_000, 5_000_000)
+          if (nums.length) return Math.max(...nums)
         }
       }
     }
 
-    // Prioritas 2: baris CASH yang mengandung angka
+    // Prioritas 2: baris CASH/TUNAI yang mengandung angka di baris yang sama
     for (const line of lines) {
-      const m = line.match(/(?:cash|tunai)[^\n]*?(\d{1,3}(?:[.,]\d{3})+)/i)
-      if (m) {
-        const num = parseInt(m[1].replace(/[.,]/g, ''), 10)
-        if (num >= 10_000 && num <= 5_000_000) return num
+      if (/(cash|tunai)/i.test(line)) {
+        const nums = extractNumsFromLine(line, 10_000, 5_000_000)
+        if (nums.length) return Math.max(...nums)
       }
     }
 
@@ -93,36 +151,33 @@ function extractAmount(text: string, category?: string): number | null {
     for (let i = 0; i < lines.length; i++) {
       if (/^cash$/i.test(lines[i].trim())) {
         for (let j = i + 1; j <= Math.min(i + 2, lines.length - 1); j++) {
-          const cleaned = lines[j].replace(/[^\d.,]/g, ' ').trim()
-          const m = cleaned.match(/(\d{1,3}(?:[.,]\d{3})+)/)
-          if (m) {
-            const num = parseInt(m[1].replace(/[.,]/g, ''), 10)
-            if (num >= 10_000 && num <= 5_000_000) return num
-          }
+          const nums = extractNumsFromLine(lines[j], 10_000, 5_000_000)
+          if (nums.length) return Math.max(...nums)
         }
       }
     }
 
-    // Prioritas 4: fallback — semua angka ribuan, skip baris harga per liter
-    const bensinSkipKeywords = [
-      'harga non subsidi',
-      'harga jual',
-      'subsidi pemerintah',
-      'tanpa subsidi',
-      'rp/liter',
+    // Prioritas 4: TOTAL AMOUNT / TOTAL (kasus SPBU seperti "100000Rp")
+    for (const line of lines) {
+      if (/total\s*amount|^total\b/i.test(line)) {
+        const nums = extractNumsFromLine(line, 500, 5_000_000)
+        if (nums.length) return Math.max(...nums)
+      }
+    }
+
+    // Prioritas 5: fallback — semua angka ribuan, skip baris harga per liter/saldo
+    const bensinHardExclude = [
+      'harga non subsidi', 'harga jual', 'subsidi pemerintah',
+      'tanpa subsidi', 'rp/liter', '/l', 'saldo', 'sisa',
     ]
     const candidates: { num: number; priority: number }[] = []
     for (const line of lines) {
       const lineLower = line.toLowerCase()
-      if (bensinSkipKeywords.some(kw => lineLower.includes(kw))) continue
-      const isBayar = /dibayar|cash|tunai|total penjualan/.test(lineLower)
-      const match = line.match(/\b(\d{1,3}(?:[.,]\d{3})+)\b/)
-      if (match) {
-        const num = parseInt(match[1].replace(/[.,]/g, ''), 10)
-        if (num >= 10_000 && num <= 5_000_000) {
-          candidates.push({ num, priority: isBayar ? 5 : 2 })
-        }
-      }
+      if (bensinHardExclude.some(kw => lineLower.includes(kw))) continue
+      if (isDateOrTimeLine(line)) continue
+      const isBayar = /dibayar|cash|tunai|total penjualan|total amount/.test(lineLower)
+      const nums = extractNumsFromLine(line, 10_000, 5_000_000)
+      for (const num of nums) candidates.push({ num, priority: isBayar ? 5 : 2 })
     }
     if (candidates.length) {
       const maxPriority = Math.max(...candidates.map(c => c.priority))
@@ -133,36 +188,52 @@ function extractAmount(text: string, category?: string): number | null {
     return null
   }
 
-  // Generic logic untuk kategori lainnya (tol sudah return di atas, bensin juga)
-  const skipKeywords = ['saldo awal', 'saldo akhir', 'sisa', 'balance', 'sebelum', 'sesudah', 'kembalian']
-  const biayaKeywords = ['biaya', 'tarif', 'total', 'bayar', 'charge', 'harga', 'transaksi', 'tagihan', 'nominal', 'jumlah', 'amount', 'tol', 'parkir', 'bbm', 'bensin']
-  const candidates: { num: number; priority: number }[] = []
+  // ── Generic logic (parkir, lainnya, dan fallback tol) ────────────────
+  //
+  // Baris yang PASTI bukan nominal transaksi — dibuang total (hardExclude),
+  // bukan sekadar diturunkan prioritasnya seperti versi lama. Ini yang
+  // memperbaiki kasus "SALDO: Rp.93.500" / "Saldo : Rp247.000" ikut
+  // kepilih jadi amount.
+  const hardExclude = [
+    'saldo', 'balance', 'sisa', 'kembalian', 'kembali',
+    'no seri', 'no. seri', ' seri', 's/n', 'sn:', 'cn:',
+    'tid', 'mid', 'nik', 'vip',
+  ]
+
+  const strongKeywords = [
+    'total amount', 'total', 'tarif', 'biaya', 'bayar', 'charge',
+    'jumlah', 'nominal', 'tagihan', 'e-toll', 'e-pay', 'epay',
+    'gol-', 'gol ', 'harga', 'amount',
+  ]
+
+  // PASS 1: baris dengan keyword kuat & bukan metadata -> ambil langsung.
+  // Return di sini mencegah tie-break `Math.max` salah pilih saldo,
+  // karena kita tidak pernah membandingkan lintas baris kalau baris
+  // "benar" sudah ketemu duluan.
   for (const line of lines) {
     const lineLower = line.toLowerCase()
-    if (skipKeywords.some(kw => lineLower.includes(kw))) continue
-    if (category === 'tol' && lineLower.includes('cn:')) continue
-    const isBiaya = biayaKeywords.some(kw => lineLower.includes(kw))
-    let match
-    const rpShortPattern = /\bRp\.?\s*(\d{1,7})\b(?!\d)/gi
-    while ((match = rpShortPattern.exec(line)) !== null) {
-      const num = parseInt(match[1].replace(/[.,]/g, ''), 10)
-      if (num >= 500 && num <= 5_000_000) candidates.push({ num, priority: isBiaya ? 4 : 3 })
-    }
-    const thousandPattern = /\b(\d{1,3}(?:[.,]\d{3})+)\b/g
-    while ((match = thousandPattern.exec(line)) !== null) {
-      const num = parseInt(match[1].replace(/[.,]/g, ''), 10)
-      if (num >= 500 && num <= 5_000_000) candidates.push({ num, priority: isBiaya ? 3 : 2 })
-    }
-    const plainPattern = /\b(\d{3,6})\b/g
-    while ((match = plainPattern.exec(line)) !== null) {
-      const num = parseInt(match[1], 10)
-      if (num >= 500 && num <= 500_000) candidates.push({ num, priority: isBiaya ? 2 : 1 })
-    }
+    if (hardExclude.some(kw => lineLower.includes(kw))) continue
+    if (isDateOrTimeLine(line)) continue
+    if (!strongKeywords.some(kw => lineLower.includes(kw))) continue
+
+    const nums = extractNumsFromLine(line, 500, 5_000_000)
+    if (nums.length) return Math.max(...nums)
   }
+
+  // PASS 2: fallback — tidak ada baris dengan keyword kuat. Kumpulkan
+  // semua angka valid selain baris metadata, ambil yang TERKECIL (bukan
+  // terbesar) karena tanpa keyword, angka besar biasanya justru saldo/
+  // nomor referensi yang entah kenapa lolos filter kata kunci di atas.
+  const candidates: number[] = []
+  for (const line of lines) {
+    const lineLower = line.toLowerCase()
+    if (hardExclude.some(kw => lineLower.includes(kw))) continue
+    if (isDateOrTimeLine(line)) continue
+    candidates.push(...extractNumsFromLine(line, 500, 5_000_000))
+  }
+
   if (!candidates.length) return null
-  const maxPriority = Math.max(...candidates.map(c => c.priority))
-  const top = candidates.filter(c => c.priority === maxPriority)
-  return Math.max(...top.map(c => c.num))
+  return Math.min(...candidates)
 }
 
 const MONTH_MAP: Record<string, string> = {

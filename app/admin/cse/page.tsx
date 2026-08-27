@@ -73,7 +73,7 @@ export default function AdminCsePage() {
 
   const fetchSubmissions = async () => {
     setLoading(true)
-    let url = `/api/submissions?from=${dateFrom}&to=${dateTo}`
+    let url = `/api/submissions?bill_from=${dateFrom}&bill_to=${dateTo}`
     if (selectedCse !== 'all') url += `&driver_id=${selectedCse}`
     else if (selectedBranch !== 'all') url += `&branch_id=${selectedBranch}`
     else url += `&role=cse`
@@ -248,6 +248,7 @@ export default function AdminCsePage() {
                   defaultMonth={dateFrom.slice(0, 7)}
                   companyName={companyName}
                   onArchiveDone={fetchSubmissions}
+                  isAdmin={true} 
                 />
               </div>
             </div>
@@ -437,3 +438,4 @@ export default function AdminCsePage() {
     </>
   )
 }
+

@@ -23,7 +23,12 @@ type ExportCSEButtonProps = {
   defaultCseId?: string
   defaultMonth?: string
   companyName?: string
-  onArchiveDone?: () => void 
+  onArchiveDone?: () => void
+  // Kalau true, tampilkan chip "Semua Branch" (export gabungan lintas
+  // branch). Backend hanya mengizinkan mode ini untuk role admin, jadi
+  // parent component wajib passing isAdmin={true} secara eksplisit —
+  // default-nya false biar aman kalau lupa di-pass dari halaman CSE.
+  isAdmin?: boolean
 }
 
 export default function ExportCSEButton({
@@ -33,7 +38,8 @@ export default function ExportCSEButton({
   defaultCseId,
   defaultMonth,
   companyName = 'PT. Indosat Tbk',
-  onArchiveDone, // [BARU]
+  onArchiveDone,
+  isAdmin = false,
 }: ExportCSEButtonProps) {
   const now = new Date()
 
@@ -90,9 +96,10 @@ export default function ExportCSEButton({
     display: 'block', fontSize: 11, color: '#bbb', marginBottom: 4,
   }
 
-  const selectedBranch = allBranches.find(b => b.id === branchId)
+  const isAllBranches = branchId === 'all'
+  const selectedBranch = isAllBranches ? null : allBranches.find(b => b.id === branchId)
   const cseInBranch = allCseUsers.filter(u => u.branch_id === branchId)
-  const selectedCseUser = cseInBranch.find(u => u.id === cseId)
+  const selectedCseUser = isAllBranches ? undefined : cseInBranch.find(u => u.id === cseId)
 
   const handleExportPdf = async () => {
     setError(null)
@@ -103,7 +110,11 @@ export default function ExportCSEButton({
     try {
       const res = await fetch('/api/export/cse-pdf', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branch_id: branchId, cse_id: cseId || undefined, date_from: dateFrom, date_to: dateTo, company_name: companyName, subtitle }),
+        body: JSON.stringify({
+          branch_id: branchId,
+          cse_id: isAllBranches ? undefined : (cseId || undefined),
+          date_from: dateFrom, date_to: dateTo, company_name: companyName, subtitle,
+        }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Gagal generate PDF') }
 
@@ -111,8 +122,10 @@ export default function ExportCSEButton({
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      const namePart = [selectedBranch?.name, selectedCseUser ? (selectedCseUser.mc_name || selectedCseUser.name) : null]
-        .filter(Boolean).join('_').replace(/\s+/g, '_') || 'branch'
+      const namePart = isAllBranches
+        ? 'SemuaBranch'
+        : [selectedBranch?.name, selectedCseUser ? (selectedCseUser.mc_name || selectedCseUser.name) : null]
+            .filter(Boolean).join('_').replace(/\s+/g, '_') || 'branch'
       a.download = `Reimburse_CSE_${namePart}_${dateFrom}_${dateTo}.pdf`
       a.click()
       URL.revokeObjectURL(url)
@@ -130,7 +143,11 @@ export default function ExportCSEButton({
     try {
       const res = await fetch('/api/export/cse-excel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branch_id: branchId, cse_id: cseId || undefined, date_from: dateFrom, date_to: dateTo, subtitle }),
+        body: JSON.stringify({
+          branch_id: branchId,
+          cse_id: isAllBranches ? undefined : (cseId || undefined),
+          date_from: dateFrom, date_to: dateTo, subtitle,
+        }),
       })
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Gagal generate Excel') }
 
@@ -138,8 +155,10 @@ export default function ExportCSEButton({
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      const namePart = [selectedBranch?.name, selectedCseUser ? (selectedCseUser.mc_name || selectedCseUser.name) : null]
-        .filter(Boolean).join('_').replace(/\s+/g, '_') || 'branch'
+      const namePart = isAllBranches
+        ? 'SemuaBranch'
+        : [selectedBranch?.name, selectedCseUser ? (selectedCseUser.mc_name || selectedCseUser.name) : null]
+            .filter(Boolean).join('_').replace(/\s+/g, '_') || 'branch'
       a.download = `Rekap_CSE_${namePart}_${dateFrom}_${dateTo}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
@@ -189,7 +208,7 @@ export default function ExportCSEButton({
               <div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: '#111' }}>Export Laporan CSE</div>
                 <div style={{ fontSize: 12, color: '#aaa', marginTop: 3 }}>
-                  {selectedCseUser ? 'Khusus 1 CSE' : 'Digrup per branch'} · PDF (3 halaman) & Excel
+                  {isAllBranches ? 'Semua branch & CSE' : selectedCseUser ? 'Khusus 1 CSE' : 'Digrup per branch'} · PDF & Excel
                 </div>
               </div>
               <button onClick={() => { setOpen(false); setError(null) }} style={{ width: 32, height: 32, borderRadius: '50%', background: IOH.bg, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -205,6 +224,18 @@ export default function ExportCSEButton({
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                  {isAdmin && (
+                    <button onClick={() => { setBranchId('all'); setCseId('') }} className="branch-chip" style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      padding: '7px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
+                      border: `1.5px solid ${isAllBranches ? IOH.red : IOH.border}`,
+                      background: isAllBranches ? IOH.red : IOH.white,
+                      color: isAllBranches ? '#fff' : IOH.charcoal,
+                      cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    }}>
+                      <Building2 size={11} /> Semua Branch
+                    </button>
+                  )}
                   {allBranches.map(b => (
                     <button key={b.id} onClick={() => { setBranchId(b.id); setCseId('') }} className="branch-chip" style={{
                       display: 'flex', alignItems: 'center', gap: 5,
@@ -221,7 +252,7 @@ export default function ExportCSEButton({
               )}
             </div>
 
-            {branchId && (
+            {branchId && !isAllBranches && (
               <div style={{ marginBottom: 16 }}>
                 <label style={labelStyle}>CSE (opsional)</label>
                 {cseInBranch.length === 0 ? (
@@ -256,6 +287,12 @@ export default function ExportCSEButton({
                     <div style={{ fontSize: 11, color: '#bbb', marginTop: 6 }}>Kosongkan ("Semua CSE") untuk laporan gabungan 1 branch.</div>
                   </>
                 )}
+              </div>
+            )}
+
+            {isAllBranches && (
+              <div style={{ marginBottom: 16, fontSize: 12, color: '#888', padding: '10px 13px', background: IOH.bg, borderRadius: 10, border: `1px solid ${IOH.border}` }}>
+                Mode ini otomatis menggabungkan semua branch & CSE dalam periode yang dipilih. Halaman/sheet pertama laporan berisi ringkasan per branch.
               </div>
             )}
 
@@ -298,7 +335,9 @@ export default function ExportCSEButton({
 
             {!isLoading && (
               <div style={{ marginTop: 10, fontSize: 11, color: '#bbb', textAlign: 'center' }}>
-                PDF: rekap + lampiran foto + lembar tanda tangan (3 halaman) · Excel: 1 sheet per branch, digrup per CSE
+                {isAllBranches
+                  ? 'PDF: ringkasan + rekap semua branch · Excel: sheet Summary + 1 sheet per branch'
+                  : 'PDF: rekap + lampiran foto + lembar tanda tangan · Excel: 1 sheet per branch, digrup per CSE'}
               </div>
             )}
           </div>
@@ -307,3 +346,4 @@ export default function ExportCSEButton({
     </>
   )
 }
+

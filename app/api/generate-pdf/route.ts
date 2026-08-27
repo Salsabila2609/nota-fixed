@@ -70,15 +70,32 @@ export async function POST(req: NextRequest) {
             if (sub.image_path) {
               try {
                 result.imageData = await r2Download(sub.image_path)
-              } catch {
+              } catch (err) {
+                console.error(`[generate-pdf] Gagal download image_path untuk submission ${sub.id}:`, err)
               }
             }
 
-            // Foto timestamp (cse) — selalu di-download kalau ada, gak digantung threshold
+            // [FIX] Bukti transfer driver disimpan di kolom proof_image_path
+            // (terpisah dari marking_image_path yang dipakai untuk CSE).
+            // Sebelumnya field ini tidak pernah di-download di sini, jadi
+            // slot "Bukti Transaksi Nota" di PDF driver selalu kosong.
+            if (sub.proof_image_path) {
+              try {
+                result.proofImageData = await r2Download(sub.proof_image_path)
+              } catch (err) {
+                console.error(`[generate-pdf] Gagal download proof_image_path untuk submission ${sub.id}:`, err)
+              }
+            }
+
+            // marking_image_path saat ini selalu null untuk driver, tapi
+            // tetap didownload kalau suatu saat dipakai (mis. dokumentasi
+            // terpisah dari bukti transfer, seperti pada CSE).
             if (sub.marking_image_path) {
               try {
                 result.markingImageData = await r2Download(sub.marking_image_path)
-              } catch {}
+              } catch (err) {
+                console.error(`[generate-pdf] Gagal download marking_image_path untuk submission ${sub.id}:`, err)
+              }
             }
 
             return result

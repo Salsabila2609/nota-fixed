@@ -1,6 +1,6 @@
 'use client'
-import { useState, useRef } from 'react'
-import { Download, X, ChevronDown, FileText, FileSpreadsheet, Archive, RotateCcw } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Download, X, ChevronDown, FileText, FileSpreadsheet, Archive, RotateCcw, CheckCircle2 } from 'lucide-react'
 
 const IOH = {
   red:     '#ED1C24',
@@ -54,6 +54,7 @@ export default function ExportButton({
   const [open, setOpen] = useState(false)
   const [loadingExcel, setLoadingExcel] = useState(false)
   const [loadingPdf, setLoadingPdf] = useState(false)
+  const [loadingArchive, setLoadingArchive] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [dateFrom, setDateFrom] = useState(defaultDateFrom)
@@ -67,9 +68,19 @@ export default function ExportButton({
   const [approvedByTitle, setApprovedByTitle] = useState('')
   const [signatureOpen, setSignatureOpen] = useState(false)
 
-  const downloadedRef = useRef({ pdf: false, excel: false })
   const [downloadedPdf, setDownloadedPdf] = useState(false)
   const [downloadedExcel, setDownloadedExcel] = useState(false)
+  const [archived, setArchived] = useState(false)
+
+  // [FIX] Reset status download & archive setiap kali filter (tanggal/driver)
+  // berubah — bukan cuma pas modal dibuka. Ini mencegah kasus: klik Excel,
+  // ganti tanggal/driver, klik PDF -> auto-archive kepicu dengan kombinasi
+  // filter yang campur aduk (beda dari yang sebenarnya di-export).
+  useEffect(() => {
+    setDownloadedPdf(false)
+    setDownloadedExcel(false)
+    setArchived(false)
+  }, [dateFrom, dateTo, selectedDrivers])
 
   const inputStyle: React.CSSProperties = {
     width: '100%', padding: '10px 13px', borderRadius: 10,
@@ -87,27 +98,34 @@ export default function ExportButton({
     display: 'block', fontSize: 11, color: '#bbb', marginBottom: 4,
   }
 
-  const archiveIfBothDone = async () => {
-    if (!downloadedRef.current.pdf || !downloadedRef.current.excel) return
+  // [FIX] Archive sekarang HARUS dipicu manual oleh admin lewat tombol,
+  // bukan otomatis begitu PDF+Excel sama-sama selesai didownload.
+  const handleArchive = async () => {
+    setError(null)
+    setLoadingArchive(true)
+    try {
+      const targets = selectedDrivers.length > 0
+        ? allDrivers.filter(d => selectedDrivers.includes(d.id))
+        : allDrivers
 
-    const targets = selectedDrivers.length > 0
-      ? allDrivers.filter(d => selectedDrivers.includes(d.id))
-      : allDrivers
+      const res = await fetch('/api/submissions/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: dateFrom,
+          to: dateTo,
+          driver_ids: targets.map(d => d.id),
+        }),
+      })
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || 'Gagal mengarsipkan nota') }
 
-    await fetch('/api/submissions/archive', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: dateFrom,
-        to: dateTo,
-        driver_ids: targets.map(d => d.id),
-      }),
-    })
-    onArchiveDone?.()
-    downloadedRef.current = { pdf: false, excel: false }
-    setDownloadedPdf(false)
-    setDownloadedExcel(false)
-    setOpen(false)
+      setArchived(true)
+      onArchiveDone?.()
+    } catch (err: any) {
+      setError(err.message || 'Terjadi kesalahan saat mengarsipkan')
+    } finally {
+      setLoadingArchive(false)
+    }
   }
 
   const handleExportExcel = async () => {
@@ -142,9 +160,7 @@ export default function ExportButton({
       a.download = `REKAP_BBM_DRIVER_${dateFrom}_${dateTo}.xlsx`
       a.click()
       URL.revokeObjectURL(url)
-      downloadedRef.current.excel = true
       setDownloadedExcel(true)
-      await archiveIfBothDone()
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan')
     } finally { setLoadingExcel(false) }
@@ -189,9 +205,7 @@ export default function ExportButton({
       a.download = filename
       a.click()
       URL.revokeObjectURL(url)
-      downloadedRef.current.pdf = true
       setDownloadedPdf(true)
-      await archiveIfBothDone()
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan')
     } finally { setLoadingPdf(false) }
@@ -201,15 +215,13 @@ export default function ExportButton({
     setSelectedDrivers(prev => prev.includes(id) ? prev.filter(d => d !== id) : [...prev, id])
   }
 
-  const isLoading = loadingExcel || loadingPdf 
+  const isLoading = loadingExcel || loadingPdf || loadingArchive
 
   const targets = selectedDrivers.length > 0
     ? allDrivers.filter(d => selectedDrivers.includes(d.id))
     : allDrivers
 
-  const catLabels: Record<string, string> = {
-    parkir: 'Parkir', tol: 'Tol', bensin: 'Bensin', lainnya: 'Lainnya',
-  }
+  const bothDownloaded = downloadedPdf && downloadedExcel
 
   return (
     <>
@@ -224,7 +236,7 @@ export default function ExportButton({
       `}</style>
 
       <button
-        onClick={() => { setOpen(true); downloadedRef.current = { pdf: false, excel: false }; setDownloadedPdf(false); setDownloadedExcel(false) }}
+        onClick={() => { setOpen(true); setError(null) }}
         style={{
           display: 'flex', alignItems: 'center', gap: 7,
           padding: '8px 16px', borderRadius: 10,
@@ -262,8 +274,8 @@ export default function ExportButton({
             <div style={{ padding: '11px 14px', borderRadius: 12, marginBottom: 18, background: '#EFF9F8', border: `1.5px solid ${IOH.teal}44`, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
               <Archive size={15} color={IOH.teal} style={{ flexShrink: 0, marginTop: 1 }} />
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: IOH.teal }}>Nota otomatis diarsipkan setelah export</div>
-                <div style={{ fontSize: 11, color: '#5a9e98', marginTop: 2 }}>Nota tidak akan muncul lagi di tampilan admin. Bisa dipilih dan dikembalikan lewat tombol "Lihat & Pulihkan Arsip".</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: IOH.teal }}>Nota TIDAK otomatis diarsipkan</div>
+                <div style={{ fontSize: 11, color: '#5a9e98', marginTop: 2 }}>Download dulu PDF & Excel, lalu konfirmasi manual lewat tombol "Arsipkan" yang muncul di bawah. Nota bisa dikembalikan lewat tombol "Lihat & Pulihkan Arsip".</div>
               </div>
             </div>
 
@@ -355,20 +367,22 @@ export default function ExportButton({
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
-              <button onClick={() => { setOpen(false); setError(null) }} disabled={isLoading} style={{ height: 46, borderRadius: 12, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: isLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, color: IOH.charcoal, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-                Batal
-              </button>
-              <button onClick={handleExportPdf} disabled={isLoading} style={{ height: 46, borderRadius: 12, border: 'none', background: isLoading ? '#ddd' : `linear-gradient(135deg, ${IOH.red} 0%, #c8000a 100%)`, cursor: isLoading ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: "'Plus Jakarta Sans', sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, boxShadow: isLoading ? 'none' : '0 4px 14px rgba(237,28,36,0.35)' }}>
-                {loadingPdf ? <><div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> PDF...</> : <><FileText size={14} /> PDF</>}
-              </button>
-              <button onClick={handleExportExcel} disabled={isLoading} style={{ height: 46, borderRadius: 12, border: 'none', background: isLoading ? '#ddd' : `linear-gradient(135deg, ${IOH.teal} 0%, #2aa89a 100%)`, cursor: isLoading ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: "'Plus Jakarta Sans', sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, boxShadow: isLoading ? 'none' : '0 4px 14px rgba(50,188,173,0.35)' }}>
-                {loadingExcel ? <><div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> Excel...</> : <><FileSpreadsheet size={14} /> Excel</>}
-              </button>
-            </div>
+            {!archived && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 10 }}>
+                <button onClick={() => { setOpen(false); setError(null) }} disabled={isLoading} style={{ height: 46, borderRadius: 12, border: `1.5px solid ${IOH.border}`, background: IOH.white, cursor: isLoading ? 'not-allowed' : 'pointer', fontSize: 13, fontWeight: 600, color: IOH.charcoal, fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
+                  Batal
+                </button>
+                <button onClick={handleExportPdf} disabled={isLoading} style={{ height: 46, borderRadius: 12, border: 'none', background: isLoading ? '#ddd' : `linear-gradient(135deg, ${IOH.red} 0%, #c8000a 100%)`, cursor: isLoading ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: "'Plus Jakarta Sans', sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, boxShadow: isLoading ? 'none' : '0 4px 14px rgba(237,28,36,0.35)' }}>
+                  {loadingPdf ? <><div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> PDF...</> : <>{downloadedPdf ? <CheckCircle2 size={14} /> : <FileText size={14} />} PDF</>}
+                </button>
+                <button onClick={handleExportExcel} disabled={isLoading} style={{ height: 46, borderRadius: 12, border: 'none', background: isLoading ? '#ddd' : `linear-gradient(135deg, ${IOH.teal} 0%, #2aa89a 100%)`, cursor: isLoading ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, color: '#fff', fontFamily: "'Plus Jakarta Sans', sans-serif", display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, boxShadow: isLoading ? 'none' : '0 4px 14px rgba(50,188,173,0.35)' }}>
+                  {loadingExcel ? <><div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> Excel...</> : <>{downloadedExcel ? <CheckCircle2 size={14} /> : <FileSpreadsheet size={14} />} Excel</>}
+                </button>
+              </div>
+            )}
 
-            {(downloadedPdf || downloadedExcel) && (
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 8 }}>
+            {!archived && (downloadedPdf || downloadedExcel) && (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: bothDownloaded ? 4 : 0 }}>
                 <span style={{ fontSize: 11, fontWeight: 600, color: downloadedPdf ? IOH.teal : '#ccc', display: 'flex', alignItems: 'center', gap: 4 }}>
                   {downloadedPdf ? '✓' : '○'} PDF
                 </span>
@@ -376,12 +390,54 @@ export default function ExportButton({
                 <span style={{ fontSize: 11, fontWeight: 600, color: downloadedExcel ? IOH.teal : '#ccc', display: 'flex', alignItems: 'center', gap: 4 }}>
                   {downloadedExcel ? '✓' : '○'} Excel
                 </span>
-                <span style={{ fontSize: 11, color: '#aaa', marginLeft: 4 }}>
-                  {downloadedPdf && downloadedExcel ? '— mengarsipkan...' : '— download satunya lagi untuk arsipkan'}
-                </span>
+                {!bothDownloaded && (
+                  <span style={{ fontSize: 11, color: '#aaa', marginLeft: 4 }}>— download satunya lagi untuk bisa mengarsipkan</span>
+                )}
               </div>
             )}
-            {!isLoading && (
+
+            {/* [FIX] Archive sekarang butuh klik manual + ada ringkasan jelas apa yang akan diarsipkan */}
+            {!archived && bothDownloaded && (
+              <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: '#FFFBEB', border: '1.5px solid #FFD166' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#92400E', marginBottom: 4 }}>Siap diarsipkan?</div>
+                <div style={{ fontSize: 11, color: '#B45309', marginBottom: 10, lineHeight: 1.6 }}>
+                  Nota dengan <strong>tanggal struk {dateFrom} s/d {dateTo}</strong> untuk{' '}
+                  <strong>{selectedDrivers.length > 0 ? `${targets.length} driver terpilih` : 'semua driver'}</strong> akan disembunyikan dari tampilan admin (bisa dipulihkan kapan saja).
+                </div>
+                <button
+                  onClick={handleArchive}
+                  disabled={loadingArchive}
+                  style={{
+                    width: '100%', height: 42, borderRadius: 10, border: 'none',
+                    background: loadingArchive ? '#ddd' : IOH.charcoal,
+                    cursor: loadingArchive ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700,
+                    color: '#fff', fontFamily: "'Plus Jakarta Sans', sans-serif",
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                  }}
+                >
+                  {loadingArchive
+                    ? <><div style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} /> Mengarsipkan...</>
+                    : <><Archive size={14} /> Arsipkan Nota Periode Ini</>
+                  }
+                </button>
+              </div>
+            )}
+
+            {archived && (
+              <div style={{ marginTop: 14, padding: 14, borderRadius: 12, background: '#EFF9F8', border: `1.5px solid ${IOH.teal}66`, textAlign: 'center' }}>
+                <CheckCircle2 size={22} color={IOH.teal} style={{ marginBottom: 6 }} />
+                <div style={{ fontSize: 13, fontWeight: 700, color: IOH.teal }}>Nota berhasil diarsipkan</div>
+                <div style={{ fontSize: 11, color: '#5a9e98', marginTop: 3 }}>Periode {dateFrom} s/d {dateTo}</div>
+                <button
+                  onClick={() => { setOpen(false); setError(null) }}
+                  style={{ marginTop: 12, padding: '8px 18px', borderRadius: 10, border: 'none', background: IOH.teal, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans', sans-serif" }}
+                >
+                  Selesai
+                </button>
+              </div>
+            )}
+
+            {!isLoading && !archived && (
               <div style={{ marginTop: 10, fontSize: 11, color: '#bbb', textAlign: 'center' }}>
                 {targets.length === 1 ? `PDF: 1 file untuk ${targets[0]?.name}` : `PDF: 1 file gabungan (${targets.length} driver) · Excel: 1 file rekap`}
               </div>

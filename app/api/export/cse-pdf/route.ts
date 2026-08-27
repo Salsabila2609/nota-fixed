@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import pLimit from 'p-limit'
 import { getSessionFromRequest } from '@/lib/auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
-import { generateCSEBranchPDF, CSESubmission } from '@/lib/pdf-generator-cse'
+import { generateCSEBranchPDF, generateCSEAllBranchesPDF, CSESubmission } from '@/lib/pdf-generator-cse'
 import { r2Download } from '@/lib/r2'
 
 export const maxDuration = 300
@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const supabaseAdmin = getSupabaseAdmin()
   const session = await getSessionFromRequest(req)
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  // [BARU] admin bebas export branch mana saja; CSE cuma boleh export branch-nya sendiri
+  // admin bebas export branch mana saja; CSE cuma boleh export branch-nya sendiri
   if (session.role !== 'admin' && session.role !== 'cse') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -21,10 +21,15 @@ export async function POST(req: NextRequest) {
     let { branch_id, cse_id } = body
     const { date_from, date_to, company_name, subtitle } = body
 
-    // [BARU] Kalau yang minta adalah CSE (bukan admin), abaikan branch_id/cse_id
-    // dari body — paksa pakai branch dia sendiri, dan selalu gabungan SEMUA
-    // CSE di branch itu (bukan filter 1 orang), sesuai keputusan bisnis:
-    // "saling tau antar CSE dalam 1 branch+brand yang sama gapapa".
+    if (!date_from || !date_to) {
+      return NextResponse.json({ error: 'Parameter tidak lengkap' }, { status: 400 })
+    }
+
+    // Kalau yang minta adalah CSE (bukan admin), abaikan branch_id/cse_id dari
+    // body — paksa pakai branch dia sendiri, dan selalu gabungan SEMUA CSE di
+    // branch itu (bukan filter 1 orang), sesuai keputusan bisnis: "saling
+    // tau antar CSE dalam 1 branch+brand yang sama gapapa". CSE juga gak
+    // pernah boleh pakai mode 'all' lintas branch.
     if (session.role === 'cse') {
       const { data: me, error: meErr } = await supabaseAdmin
         .from('users')
@@ -38,7 +43,92 @@ export async function POST(req: NextRequest) {
       cse_id = undefined
     }
 
-    if (!branch_id || !date_from || !date_to) {
+    // ── Mode "Semua Branch" — hanya admin ──────────────────────────────────
+    if (session.role === 'admin' && branch_id === 'all') {
+      const { data: allBranches, error: bErr } = await supabaseAdmin.from('branches').select('*')
+      if (bErr) return NextResponse.json({ error: bErr.message }, { status: 500 })
+      if (!allBranches?.length) {
+        return NextResponse.json({ error: 'Belum ada branch terdaftar' }, { status: 404 })
+      }
+
+      const { data: allCse, error: uErr } = await supabaseAdmin
+        .from('users').select('id, name, mc_name, branch_id').eq('role', 'cse')
+      if (uErr) return NextResponse.json({ error: uErr.message }, { status: 500 })
+      if (!allCse?.length) {
+        return NextResponse.json({ error: 'Belum ada CSE terdaftar' }, { status: 404 })
+      }
+
+      const mcByUser = new Map(allCse.map(u => [u.id, u.mc_name || '-']))
+      const branchByUser = new Map(allCse.map(u => [u.id, u.branch_id]))
+
+      const { data: submissions, error: subErr } = await supabaseAdmin
+        .from('submissions')
+        .select('*')
+        .in('driver_id', allCse.map(u => u.id))
+        .is('archived_at', null)
+        .gte('bill_date', date_from)
+        .lte('bill_date', date_to)
+
+      if (subErr) return NextResponse.json({ error: subErr.message }, { status: 500 })
+      if (!submissions?.length) {
+        return NextResponse.json({ error: 'Tidak ada nota untuk periode ini' }, { status: 404 })
+      }
+
+      const downloadLimit = pLimit(8)
+      const withImages: (CSESubmission & { _branchId: string })[] = await Promise.all(
+        submissions.map(sub => downloadLimit(async () => {
+          const result: CSESubmission & { _branchId: string } = {
+            id: sub.id,
+            cse_name: sub.driver_name,
+            mc_name: mcByUser.get(sub.driver_id) || '-',
+            category: sub.category,
+            description: sub.description,
+            amount: sub.amount,
+            bill_date: sub.bill_date,
+            submission_date: sub.submission_date,
+            _branchId: branchByUser.get(sub.driver_id) || '',
+          }
+          if (sub.image_path) { try { result.imageData = await r2Download(sub.image_path) } catch {} }
+          if (sub.marking_image_path) { try { result.markingImageData = await r2Download(sub.marking_image_path) } catch {} }
+          if (sub.proof_image_path) { try { result.proofImageData = await r2Download(sub.proof_image_path) } catch {} }
+          return result
+        }))
+      )
+
+      const branchGroups = allBranches
+        .map(b => {
+          const subs = withImages
+            .filter(s => s._branchId === b.id)
+            .map(({ _branchId, ...rest }) => rest as CSESubmission)
+          if (!subs.length) return null
+          return { branchName: b.name, brand: b.brand as 'IM3' | '3ID', submissions: subs }
+        })
+        .filter((g): g is { branchName: string; brand: 'IM3' | '3ID'; submissions: CSESubmission[] } => g !== null)
+
+      if (!branchGroups.length) {
+        return NextResponse.json({ error: 'Tidak ada nota untuk periode ini' }, { status: 404 })
+      }
+
+      const pdfBytes = await generateCSEAllBranchesPDF({
+        dateRange: { from: date_from, to: date_to },
+        branchGroups,
+        companyName: company_name || 'PT. Perusahaan',
+        subtitle: subtitle || '',
+      })
+
+      const filename = `Reimburse_CSE_SemuaBranch_${date_from}_${date_to}.pdf`
+
+      return new NextResponse(new Uint8Array(pdfBytes), {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': `attachment; filename="${filename}"`,
+          'Content-Length': pdfBytes.length.toString(),
+        },
+      })
+    }
+
+    // ── Mode single branch (perilaku lama) ─────────────────────────────────
+    if (!branch_id) {
       return NextResponse.json({ error: 'Parameter tidak lengkap' }, { status: 400 })
     }
 

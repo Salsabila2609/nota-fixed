@@ -90,15 +90,19 @@ function drawHeaderBar(page: PDFPage, opts: {
   bold: PDFFont; reg: PDFFont; title: string
   branchName: string; brand: string; dateRange: { from: string; to: string }
   companyName: string; subtitle: string; pageNum: number; totalPages: number
+  highlightLine?: string  
 }) {
-  const { bold, reg, title, branchName, brand, dateRange, companyName, subtitle, pageNum, totalPages } = opts
+  const { bold, reg, title, branchName, brand, dateRange, companyName, subtitle, pageNum, totalPages, highlightLine } = opts
   const y0 = A4_H - HDR_H
   page.drawRectangle({ x: 0, y: y0, width: A4_W, height: HDR_H, color: C.hdrBg })
   page.drawRectangle({ x: 0, y: y0, width: 4, height: HDR_H, color: C.teal })
 
   page.drawText(title, { x: MG, y: A4_H - 22, font: bold, size: 12, color: C.white, maxWidth: A4_W - MG * 2 - 130 })
   page.drawText(subtitle || companyName, { x: MG, y: A4_H - 36, font: reg, size: 8, color: C.textLight })
-  page.drawText(`Branch: ${branchName}  -  Brand: ${brand}`, { x: MG, y: A4_H - 50, font: bold, size: 8.5, color: C.teal })
+  page.drawText(
+    highlightLine ?? `Branch: ${branchName}  -  Brand: ${brand}`,
+    { x: MG, y: A4_H - 50, font: bold, size: 8.5, color: C.teal, maxWidth: A4_W - MG * 2 - 130 }
+  )
   page.drawText(`Periode: ${fmtDate(dateRange.from)} - ${fmtDate(dateRange.to)}`, {
     x: A4_W - MG - 190, y: A4_H - 36, font: reg, size: 7.5, color: C.textLight,
   })
@@ -141,7 +145,7 @@ async function drawCellImage(
 
 type ImgCtx = { branchName: string; brand: string; dateRange: { from: string; to: string }; companyName: string; subtitle: string }
 
-// [BARU] numberOffset dihapus — nomor SELALU restart dari 1 untuk setiap grup CSE,
+// numberOffset gak dipakai — nomor SELALU restart dari 1 untuk setiap grup CSE,
 // supaya "No. 1" di halaman foto CSE manapun = "No. 1" di tabel Excel & rekap CSE yang sama.
 async function drawCseImagePages(
   pdfDoc: PDFDocument, bold: PDFFont, reg: PDFFont,
@@ -157,15 +161,17 @@ async function drawCseImagePages(
   for (let pi = 0; pi < numPages; pi++) {
     const page = pdfDoc.addPage([A4_W, A4_H])
     drawHeaderBar(page, {
-      bold, reg, title: `LAMPIRAN FOTO NOTA - CSE: ${group.cseName.toUpperCase()}`,
+      bold, reg,
+      title: `LAMPIRAN FOTO NOTA - ${ctx.branchName.toUpperCase()} (${ctx.brand})`,   // ⬅️ branch+brand jadi judul utama
       branchName: ctx.branchName, brand: ctx.brand, dateRange: ctx.dateRange,
-      companyName: ctx.companyName, subtitle: ctx.subtitle, pageNum: startPageNum + pi, totalPages,
+      companyName: ctx.companyName, subtitle: ctx.subtitle,
+      highlightLine: `CSE: ${group.cseName.toUpperCase()}`,                          // ⬅️ CSE turun jadi baris kedua
+      pageNum: startPageNum + pi, totalPages,
     })
 
     const slice = group.items.slice(pi * ROWS_PER_IMG_PAGE, (pi + 1) * ROWS_PER_IMG_PAGE)
     for (let ri = 0; ri < slice.length; ri++) {
       const s = slice[ri]
-      // [BARU] tanpa offset — restart 1 per grup
       const rowNum = pi * ROWS_PER_IMG_PAGE + ri + 1
       const rowTop = A4_H - MG - HDR_H - ri * rowH
       const cellY = rowTop - rowInnerH - CELL_LABEL_H
@@ -206,15 +212,70 @@ async function drawCseImagePages(
   return numPages
 }
 
-// ── Halaman rekap (di akhir) ─────────────────────────────────────────────
+// ── Halaman ringkasan (summary) semua branch — cuma dipakai di export gabungan ──
+
+type BranchSummaryInput = { branchName: string; brand: string; submissions: CSESubmission[] }
+
+function drawSummaryPage(
+  pdfDoc: PDFDocument, bold: PDFFont, reg: PDFFont,
+  branchGroups: BranchSummaryInput[],
+  ctx: { dateRange: { from: string; to: string }; companyName: string; subtitle: string },
+  pageNum: number, totalPages: number,
+) {
+  const page = pdfDoc.addPage([A4_W, A4_H])
+  drawHeaderBar(page, {
+    bold, reg, title: 'SUMMARY REKAP SEMUA BRANCH',
+    branchName: 'Semua Branch', brand: '-', dateRange: ctx.dateRange,
+    companyName: ctx.companyName, subtitle: ctx.subtitle, pageNum, totalPages,
+  })
+
+  let y = A4_H - MG - HDR_H - 20
+  const TW = A4_W - MG * 2
+
+  page.drawRectangle({ x: MG, y: y - 16, width: TW, height: 20, color: C.labelBg })
+  const cols = [
+    { label: 'No', x: MG + 6 },
+    { label: 'Branch', x: MG + 40 },
+    { label: 'Brand', x: MG + 220 },
+    { label: 'Jumlah Nota', x: MG + 300 },
+    { label: 'Total Amount', x: MG + 400 },
+  ]
+  cols.forEach(c => page.drawText(c.label, { x: c.x, y: y - 10, font: bold, size: 8, color: C.white }))
+  y -= 20
+
+  let grand = 0
+  let grandNota = 0
+  branchGroups.forEach((g, i) => {
+    const total = g.submissions.reduce((s, x) => s + (x.amount || 0), 0)
+    grand += total
+    grandNota += g.submissions.length
+    const bg = i % 2 === 0 ? C.white : C.bg
+    page.drawRectangle({ x: MG, y: y - 15, width: TW, height: ROW_H, color: bg, borderColor: C.border, borderWidth: 0.3 })
+    page.drawText(String(i + 1), { x: MG + 6, y: y - 10, font: reg, size: 8, color: C.charcoal })
+    page.drawText(g.branchName, { x: MG + 40, y: y - 10, font: reg, size: 8, color: C.charcoal, maxWidth: 170 })
+    page.drawText(g.brand, { x: MG + 220, y: y - 10, font: reg, size: 8, color: C.charcoal })
+    page.drawText(String(g.submissions.length), { x: MG + 300, y: y - 10, font: reg, size: 8, color: C.charcoal })
+    page.drawText(`Rp ${fmtAmt(total)}`, { x: MG + 400, y: y - 10, font: bold, size: 8, color: C.charcoal })
+    y -= ROW_H
+  })
+
+  y -= 6
+  page.drawRectangle({ x: MG, y: y - 18, width: TW, height: 22, color: C.hdrBg })
+  page.drawText('TOTAL KESELURUHAN', { x: MG + 8, y: y - 11, font: bold, size: 9, color: C.white })
+  page.drawText(`${grandNota} Nota  -  Rp ${fmtAmt(grand)}`, { x: MG + TW - 220, y: y - 11, font: bold, size: 9, color: C.yellow })
+
+  drawFooterBar(page, reg)
+}
+
+// ── Halaman rekap (di akhir tiap branch) ─────────────────────────────────
 const ROW_H = 20
 
-// [BARU] tipe baris render: entri biasa (nomor restart per CSE) atau baris subtotal per CSE
+// tipe baris render: entri biasa (nomor restart per CSE) atau baris subtotal per CSE
 type RecapRenderRow =
   | { type: 'entry'; no: number; sub: CSESubmission }
   | { type: 'subtotal'; cseName: string; total: number }
 
-// [BARU] bangun daftar baris rekap: per grup CSE, nomor 1..N lokal, lalu 1 baris subtotal
+// bangun daftar baris rekap: per grup CSE, nomor 1..N lokal, lalu 1 baris subtotal
 function buildRecapRenderRows(groups: { cseName: string; mcName: string; items: CSESubmission[] }[]): RecapRenderRow[] {
   const rows: RecapRenderRow[] = []
   for (const g of groups) {
@@ -232,11 +293,11 @@ function buildRecapRenderRows(groups: { cseName: string; mcName: string; items: 
 
 function drawRecapPages(
   pdfDoc: PDFDocument, bold: PDFFont, reg: PDFFont,
-  groups: { cseName: string; mcName: string; items: CSESubmission[] }[], // [BARU] terima groups, bukan flat subs
+  groups: { cseName: string; mcName: string; items: CSESubmission[] }[], // terima groups, bukan flat subs
   ctx: ImgCtx & { proposalTitle?: string },
   startPageNum: number, totalPages: number,
 ): number {
-  const renderRows = buildRecapRenderRows(groups) // [BARU]
+  const renderRows = buildRecapRenderRows(groups)
 
   const availH = A4_H - MG * 2 - HDR_H - FTR_H
   const headerBlockH = 70
@@ -298,12 +359,11 @@ function drawRecapPages(
     slice.forEach((rr, i) => {
       const bg = i % 2 === 0 ? C.white : C.bg
 
-      // [BARU] baris subtotal per CSE — mirip pola driver "SUMANTO | TOTAL"
+      // baris subtotal per CSE — mirip pola driver "SUMANTO | TOTAL"
       if (rr.type === 'subtotal') {
         page.drawRectangle({ x: MG, y: y - 15, width: TW, height: ROW_H, color: C.subtotalBg })
         page.drawText(`${rr.cseName}  -  TOTAL`, { x: MG + 6, y: y - 10, font: bold, size: 7.5, color: C.white })
         const totStr = fmtAmt(rr.total)
-        const totW = bold.widthOfTextAtSize(totStr, 7.5)
         page.drawText(totStr, { x: MG + 385, y: y - 10, font: bold, size: 7.5, color: C.yellow })
         y -= ROW_H
         return
@@ -352,7 +412,7 @@ function drawRecapPages(
   return numPages
 }
 
-// ── Main export ───────────────────────────────────────────────────────────
+// ── Main export: single branch ────────────────────────────────────────────
 export async function generateCSEBranchPDF(params: GenerateCSEBranchPDFParams): Promise<Uint8Array> {
   const { branchName, brand, dateRange, companyName = 'Company', subtitle = '', proposalTitle } = params
   const subs = sortSubs(params.submissions)
@@ -367,7 +427,7 @@ export async function generateCSEBranchPDF(params: GenerateCSEBranchPDFParams): 
   const imagePagesPerGroup = groups.map(g => Math.ceil(g.items.length / ROWS_PER_IMG_PAGE) || 1)
   const totalImagePages = imagePagesPerGroup.reduce((a, b) => a + b, 0)
 
-  // [BARU] hitung ulang estimasi halaman rekap dengan menambahkan baris subtotal per CSE
+  // estimasi halaman rekap dengan menambahkan baris subtotal per CSE
   const renderRowsCount = subs.length + groups.length // tiap grup nambah 1 baris subtotal
   const availH = A4_H - MG * 2 - HDR_H - FTR_H
   const rowsFirstPage = Math.floor((availH - 70 - 24) / ROW_H)
@@ -380,14 +440,64 @@ export async function generateCSEBranchPDF(params: GenerateCSEBranchPDFParams): 
   const totalPages = totalImagePages + recapPages
 
   let pageCursor = 1
-  // [BARU] numberOffset dihapus dari pemanggilan — tiap grup restart sendiri
   for (let gi = 0; gi < groups.length; gi++) {
     const added = await drawCseImagePages(pdfDoc, bold, reg, groups[gi], ctx, pageCursor, totalPages)
     pageCursor += added
   }
 
-  // [BARU] kirim groups (bukan flat subs) supaya drawRecapPages bisa insert subtotal per CSE
   drawRecapPages(pdfDoc, bold, reg, groups, { ...ctx, proposalTitle }, pageCursor, totalPages)
+
+  return pdfDoc.save()
+}
+
+// ── Main export: semua branch sekaligus ─────────────────────────────────────
+// Halaman 1 = Summary (branch-brand-total), lalu per branch: halaman foto per
+// CSE + halaman rekap branch tsb, page numbering nyambung dari awal ke akhir.
+
+export type GenerateCSEAllBranchesPDFParams = {
+  dateRange: { from: string; to: string }
+  branchGroups: Array<{ branchName: string; brand: 'IM3' | '3ID'; submissions: CSESubmission[] }>
+  companyName?: string
+  subtitle?: string
+  proposalTitle?: string
+}
+
+export async function generateCSEAllBranchesPDF(params: GenerateCSEAllBranchesPDFParams): Promise<Uint8Array> {
+  const { dateRange, companyName = 'Company', subtitle = '', proposalTitle } = params
+  const pdfDoc = await PDFDocument.create()
+  const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold)
+  const reg = await pdfDoc.embedFont(StandardFonts.Helvetica)
+
+  const branchData = params.branchGroups.map(bg => ({
+    branchName: bg.branchName,
+    brand: bg.brand,
+    groups: groupByCse(sortSubs(bg.submissions)),
+  }))
+
+  const availH = A4_H - MG * 2 - HDR_H - FTR_H
+  const rowsFirstPage = Math.floor((availH - 70 - 24) / ROW_H)
+  const rowsOtherPage = Math.floor((availH - 24) / ROW_H)
+
+  const perBranch = branchData.map(bd => {
+    const imagePages = bd.groups.reduce((s, g) => s + (Math.ceil(g.items.length / ROWS_PER_IMG_PAGE) || 1), 0)
+    const renderRowsCount = bd.groups.reduce((s, g) => s + g.items.length, 0) + bd.groups.length
+    let recapPages = 1
+    if (renderRowsCount > rowsFirstPage) recapPages += Math.ceil((renderRowsCount - rowsFirstPage) / rowsOtherPage)
+    return { imagePages, recapPages }
+  })
+  const totalPages = 1 + perBranch.reduce((s, e) => s + e.imagePages + e.recapPages, 0)
+
+  let pageCursor = 1
+
+  for (const bd of branchData) {
+    const ctx = { branchName: bd.branchName, brand: bd.brand, dateRange, companyName, subtitle }
+    for (const g of bd.groups) {
+      pageCursor += await drawCseImagePages(pdfDoc, bold, reg, g, ctx, pageCursor, totalPages)
+    }
+    pageCursor += drawRecapPages(pdfDoc, bold, reg, bd.groups, { ...ctx, proposalTitle }, pageCursor, totalPages)
+  }
+
+  drawSummaryPage(pdfDoc, bold, reg, params.branchGroups, { dateRange, companyName, subtitle }, pageCursor, totalPages)
 
   return pdfDoc.save()
 }
