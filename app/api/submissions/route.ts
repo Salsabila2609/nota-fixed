@@ -4,6 +4,7 @@ import { getSessionFromRequest } from '@/lib/auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { processReceiptImage } from '@/lib/image-processing'
 import { r2Upload, r2SignedUrl, r2Delete } from '@/lib/r2'
+import { compressSupportImage } from '@/lib/image-processing'
 import { v4 as uuidv4 } from 'uuid'
 import { runOCRBatch } from '@/lib/ocr-google'
 import { cpuLimit, ioLimit } from '@/lib/concurrency'
@@ -259,22 +260,23 @@ export async function POST(req: NextRequest) {
           })
 
           const fileId = uuidv4()
-          const imagePath = `${folder}/${fileId}.jpg`
+          let imagePath = `${folder}/${fileId}.jpg`
           const t3 = Date.now()
           try {
-            await r2Upload(imagePath, processed.buffer, 'image/jpeg')
-            console.log(`[${label}] R2 Upload: ${Date.now() - t3}ms`)
-          } catch {
+            imagePath = await r2Upload(imagePath, processed.buffer, 'image/jpeg')
+            console.log(`[${label}] Storage Upload: ${Date.now() - t3}ms`)
+          } catch (err: any) {
+            console.error(`[${label}] Storage upload error:`, err?.name, err?.message)
             results.push({ ok: false, error: 'Gagal upload ke storage', filename: image.name })
             return
           }
 
           let markingPath: string | null = null
           if (marking) {
-            markingPath = `${folder}/${fileId}-marking.jpg`
+            const markingKey = `${folder}/${fileId}-marking.jpg`
             try {
-              const markingBuffer = Buffer.from(await marking.arrayBuffer())
-              await r2Upload(markingPath, markingBuffer, marking.type || 'image/jpeg')
+              const markingBuffer = await compressSupportImage(Buffer.from(await marking.arrayBuffer()))
+              markingPath = await r2Upload(markingKey, markingBuffer, 'image/jpeg')
             } catch {
               await r2Delete(imagePath)
               results.push({ ok: false, error: 'Gagal upload foto bukti ke storage', filename: image.name })

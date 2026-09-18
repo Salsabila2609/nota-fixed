@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth'
 import { getSupabaseAdmin } from '@/lib/supabase'
 import { r2Upload, r2Delete, r2SignedUrl } from '@/lib/r2'
+import { compressSupportImage } from '@/lib/image-processing'
 import { v4 as uuidv4 } from 'uuid'
 
 export async function POST(
@@ -49,13 +50,13 @@ export async function POST(
     await r2Delete(sub.marking_image_path)
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const ext = file.type === 'image/png' ? 'png' : 'jpg'
-  const markingPath = `${sub.driver_id}/marking/${id}-${uuidv4()}.${ext}`
+  const buffer = await compressSupportImage(Buffer.from(await file.arrayBuffer()))
+  let markingPath = `${sub.driver_id}/marking/${id}-${uuidv4()}.jpg`
 
   try {
-    await r2Upload(markingPath, buffer, file.type)
-  } catch {
+    markingPath = await r2Upload(markingPath, buffer, 'image/jpeg')
+  } catch (err: any) {
+    console.error('[upload-marking] Storage upload error:', err?.name, err?.message)
     return NextResponse.json({ error: 'Gagal upload foto timestamp ke storage' }, { status: 500 })
   }
 

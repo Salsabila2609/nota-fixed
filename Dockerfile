@@ -37,6 +37,9 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/next.config.* ./   
 
+# Folder antrean foto saat R2 tidak terjangkau
+RUN mkdir -p /app/storage-buffer && chown -R nextjs:nodejs /app/storage-buffer
+
 USER nextjs
 
 EXPOSE 3000

@@ -1,0 +1,27 @@
+name: Migrasi R2 ke B2
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install rclone
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash
+
+      - name: Salin R2 -> B2
+        env:
+          RCLONE_CONFIG_R2_TYPE: s3
+          RCLONE_CONFIG_R2_PROVIDER: Cloudflare
+          RCLONE_CONFIG_R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          RCLONE_CONFIG_R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          RCLONE_CONFIG_R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          RCLONE_CONFIG_B2_TYPE: b2
+          RCLONE_CONFIG_B2_ACCOUNT: ${{ secrets.B2_KEY_ID }}
+          RCLONE_CONFIG_B2_KEY: ${{ secrets.B2_APP_KEY }}
+        run: |
+          rclone copy "r2:${{ secrets.R2_BUCKET_NAME }}" "b2:${{ secrets.B2_BUCKET }}" \
+            --transfers 16 --stats-one-line --progress
+          echo "=== Ukuran R2 ==="; rclone size "r2:${{ secrets.R2_BUCKET_NAME }}"
+          echo "=== Ukuran B2 ==="; rclone size "b2:${{ secrets.B2_BUCKET }}"

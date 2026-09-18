@@ -79,3 +79,19 @@ export async function createThumbnail(buffer: Buffer): Promise<Buffer> {
     .jpeg({ quality: 70 })
     .toBuffer()
 }
+/**
+ * Kompres foto pendukung (bukti transfer / foto timestamp) sebelum disimpan.
+ * Tanpa cek blur, resolusi cukup tinggi supaya teks tetap terbaca.
+ * Kalau gagal diproses, buffer asli dikembalikan.
+ */
+export async function compressSupportImage(buffer: Buffer): Promise<Buffer> {
+  try {
+    return await sharp(buffer)
+      .rotate()
+      .resize(1000, 1400, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 75 })
+      .toBuffer()
+  } catch {
+    return buffer
+  }
+}

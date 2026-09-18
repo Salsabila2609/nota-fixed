@@ -42,11 +42,12 @@ export async function POST(
   }
 
   const fileId = uuidv4()
-  const newPath = `${existing.driver_id}/${existing.submission_date}/${fileId}.jpg`
+  let newPath = `${existing.driver_id}/${existing.submission_date}/${fileId}.jpg`
 
   try {
-    await r2Upload(newPath, processed.buffer, 'image/jpeg')
-  } catch {
+    newPath = await r2Upload(newPath, processed.buffer, 'image/jpeg')
+  } catch (err: any) {
+    console.error('[replace-photo] Storage upload error:', err?.name, err?.message)
     return NextResponse.json({ error: 'Gagal upload ke storage' }, { status: 500 })
   }
 
